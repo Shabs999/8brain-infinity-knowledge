@@ -1,13 +1,32 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Logo } from './BrandElements';
 import { Button } from './ui/button';
 import { cn } from '@/lib/utils';
+import { useAuth } from '../contexts/AuthContext';
+import { LogOut, User } from 'lucide-react';
 
 interface HeaderProps {
   className?: string;
 }
 
 export const Header: React.FC<HeaderProps> = ({ className }) => {
+  const { isAuthenticated, user, logout } = useAuth();
+  const navigate = useNavigate();
+
+  const handleSignIn = () => {
+    navigate('/auth');
+  };
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/');
+  };
+
+  const handleGetStarted = () => {
+    navigate('/auth');
+  };
+
   return (
     <header className={cn(
       'bg-white/95 backdrop-blur-md shadow-sm border-b border-neural-gray-200 sticky top-0 z-50',
@@ -17,35 +36,84 @@ export const Header: React.FC<HeaderProps> = ({ className }) => {
         <div className="flex justify-between items-center h-16">
           {/* Logo Section */}
           <div className="flex items-center">
-            <Logo size="sm" variant="default" />
+            <button onClick={() => navigate(isAuthenticated ? '/dashboard' : '/')}>
+              <Logo size="sm" variant="default" />
+            </button>
           </div>
           
-          {/* Navigation */}
-          <nav className="hidden md:flex items-center space-x-8">
-            <NavLink href="/">Dashboard</NavLink>
-            <NavLink href="/upload">Upload</NavLink>
-            <NavLink href="#">Graph</NavLink>
-            <NavLink href="#">Analytics</NavLink>
-          </nav>
+          {/* Navigation - Only show for authenticated users */}
+          {isAuthenticated && (
+            <nav className="hidden md:flex items-center space-x-8">
+              <NavLink href="/dashboard">Dashboard</NavLink>
+              <NavLink href="/upload">Upload</NavLink>
+              <NavLink href="#">Graph</NavLink>
+              <NavLink href="#">Analytics</NavLink>
+            </nav>
+          )}
 
           {/* Action Buttons */}
           <div className="flex items-center space-x-4">
-            <Button variant="ghost" size="sm">
-              Sign In
-            </Button>
-            <Button variant="neural" size="sm">
-              Get Started
-            </Button>
+            {isAuthenticated ? (
+              <>
+                {/* Authenticated User Menu */}
+                <div className="hidden md:flex items-center space-x-3">
+                  <div className="flex items-center space-x-2 text-sm text-neural-gray-700">
+                    <User className="h-4 w-4" />
+                    <span>{user?.firstName} {user?.lastName}</span>
+                  </div>
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    onClick={handleLogout}
+                    className="flex items-center space-x-2"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    <span>Sign Out</span>
+                  </Button>
+                </div>
+                
+                {/* Mobile User Menu */}
+                <div className="md:hidden">
+                  <Button 
+                    variant="ghost" 
+                    size="icon"
+                    onClick={handleLogout}
+                  >
+                    <LogOut className="h-5 w-5" />
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <>
+                {/* Unauthenticated Buttons */}
+                <Button 
+                  variant="ghost" 
+                  size="sm"
+                  onClick={handleSignIn}
+                >
+                  Sign In
+                </Button>
+                <Button 
+                  variant="neural" 
+                  size="sm"
+                  onClick={handleGetStarted}
+                >
+                  Get Started
+                </Button>
+              </>
+            )}
           </div>
 
-          {/* Mobile Menu Button */}
-          <div className="md:hidden">
-            <Button variant="ghost" size="icon">
-              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
-            </Button>
-          </div>
+          {/* Mobile Menu Button - Only for authenticated users */}
+          {isAuthenticated && (
+            <div className="md:hidden">
+              <Button variant="ghost" size="icon">
+                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              </Button>
+            </div>
+          )}
         </div>
       </div>
     </header>

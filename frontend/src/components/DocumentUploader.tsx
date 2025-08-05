@@ -12,6 +12,22 @@ interface UploadedFile {
   status: 'uploading' | 'processing' | 'completed' | 'error';
   progress: number;
   error?: string;
+  // Text extraction results
+  textExtraction?: {
+    extractedText: string;
+    textLength: number;
+    chunkCount: number;
+    processingTime: number;
+    metadata: any;
+  };
+  vectorProcessing?: {
+    status: string;
+    message: string;
+  };
+  graphProcessing?: {
+    status: string;
+    message: string;
+  };
 }
 
 interface DocumentUploaderProps {
@@ -128,38 +144,75 @@ export const DocumentUploader: React.FC<DocumentUploaderProps> = ({
     if (validFiles.length > 0) {
       setIsUploading(true);
       
-      // Simulate upload process (replace with actual API call)
-      for (const file of validFiles) {
-        const fileUpload = newUploadedFiles.find(uf => uf.file === file);
-        if (!fileUpload) continue;
+      try {
+        // Create FormData for file upload
+        const formData = new FormData();
+        validFiles.forEach(file => {
+          formData.append('documents', file);
+        });
 
-        // Simulate upload progress
-        for (let progress = 0; progress <= 100; progress += 10) {
-          await new Promise(resolve => setTimeout(resolve, 200));
-          
+        // Upload files to backend with text extraction
+        const response = await fetch('/api/documents/upload', {
+          method: 'POST',
+          body: formData,
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+          // Update files with extraction results
+          result.data.files.forEach((fileResult: any) => {
+            const matchingUpload = newUploadedFiles.find(uf => 
+              uf.file.name === fileResult.originalName
+            );
+            
+            if (matchingUpload) {
+              setUploadedFiles(prev =>
+                prev.map(uf =>
+                  uf.id === matchingUpload.id
+                    ? {
+                        ...uf,
+                        status: fileResult.status === 'processed' ? 'completed' : 'error',
+                        progress: 100,
+                        error: fileResult.error,
+                        textExtraction: fileResult.textExtraction,
+                        vectorProcessing: fileResult.vectorProcessing,
+                        graphProcessing: fileResult.graphProcessing
+                      }
+                    : uf
+                )
+              );
+            }
+          });
+
+          onFileUpload?.(validFiles);
+        } else {
+          // Handle upload failure
+          newUploadedFiles.forEach(upload => {
+            setUploadedFiles(prev =>
+              prev.map(uf =>
+                uf.id === upload.id
+                  ? { ...uf, status: 'error', error: result.message }
+                  : uf
+              )
+            );
+          });
+        }
+      } catch (error) {
+        // Handle network/API errors
+        newUploadedFiles.forEach(upload => {
           setUploadedFiles(prev =>
             prev.map(uf =>
-              uf.id === fileUpload.id
-                ? { ...uf, progress, status: progress === 100 ? 'processing' : 'uploading' }
+              uf.id === upload.id
+                ? { ...uf, status: 'error', error: 'Upload failed' }
                 : uf
             )
           );
-        }
-
-        // Simulate processing
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        setUploadedFiles(prev =>
-          prev.map(uf =>
-            uf.id === fileUpload.id
-              ? { ...uf, status: 'completed', progress: 100 }
-              : uf
-          )
-        );
+        });
+        console.error('Upload error:', error);
       }
 
       setIsUploading(false);
-      onFileUpload?.(validFiles);
     }
   }, [uploadedFiles.length, maxFiles, maxFileSize, onFileUpload]);
 
@@ -398,6 +451,50 @@ const FileItem: React.FC<FileItemProps> = ({
         
         {(uploadedFile.status === 'uploading' || uploadedFile.status === 'processing') && (
           <Progress value={uploadedFile.progress} className="h-2" />
+        )}
+        
+        {/* Text Extraction Results */}
+        {uploadedFile.textExtraction && uploadedFile.status === 'completed' && (
+          <div className="mt-3 p-3 bg-infinity-blue-50 rounded-lg border border-infinity-blue-200">
+            <div className="text-xs font-medium text-infinity-blue-800 mb-2">📄 Text Extraction Results</div>
+            <div className="grid grid-cols-2 gap-4 text-xs text-neural-gray-600">
+              <div>
+                <span className="font-medium">Text Length:</span> {uploadedFile.textExtraction.textLength.toLocaleString()} chars
+              </div>
+              <div>
+                <span className="font-medium">Chunks Created:</span> {uploadedFile.textExtraction.chunkCount}
+              </div>
+              <div>
+                <span className="font-medium">Processing Time:</span> {uploadedFile.textExtraction.processingTime}ms
+              </div>
+              <div>
+                <span className="font-medium">Status:</span> ✅ Ready for AI processing
+              </div>
+            </div>
+            
+            {/* Preview first 200 characters of extracted text */}
+            {uploadedFile.textExtraction.extractedText && (
+              <div className="mt-3">
+                <div className="text-xs font-medium text-neural-gray-700 mb-1">📝 Text Preview:</div>
+                <div className="text-xs text-neural-gray-600 bg-white p-2 rounded border italic">
+                  "{uploadedFile.textExtraction.extractedText.substring(0, 200)}
+                  {uploadedFile.textExtraction.extractedText.length > 200 ? '...' : ''}"
+                </div>
+              </div>
+            )}
+
+            {/* Next Phase Status */}
+            <div className="mt-3 flex space-x-4">
+              <div className="flex items-center space-x-1">
+                <div className="w-2 h-2 bg-yellow-400 rounded-full"></div>
+                <span className="text-xs text-neural-gray-600">Vector Embeddings: {uploadedFile.vectorProcessing?.status}</span>
+              </div>
+              <div className="flex items-center space-x-1">
+                <div className="w-2 h-2 bg-yellow-400 rounded-full"></div>
+                <span className="text-xs text-neural-gray-600">Knowledge Graph: {uploadedFile.graphProcessing?.status}</span>
+              </div>
+            </div>
+          </div>
         )}
       </div>
       

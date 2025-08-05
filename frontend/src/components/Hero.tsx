@@ -49,7 +49,7 @@ export const Hero: React.FC<HeroProps> = ({ className }) => {
               size="lg" 
               variant="neural" 
               className="text-lg px-8 py-4 h-auto"
-              onClick={() => window.location.href = '/upload'}
+              onClick={() => window.location.href = '/auth'}
             >
               Start Building Your Knowledge Graph
             </Button>
