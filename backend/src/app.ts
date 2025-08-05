@@ -10,12 +10,12 @@ import { Request, Response } from 'express';
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 8000;
+const PORT = process.env['PORT'] || 8000;
 
 // Security middleware
 app.use(helmet());
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production' 
+  origin: process.env['NODE_ENV'] === 'production' 
     ? ['https://8brain.ai', 'https://www.8brain.ai']
     : ['http://localhost:3000'],
   credentials: true
@@ -35,7 +35,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Health check endpoint
-app.get('/api/health', (req: Request, res: Response) => {
+app.get('/api/health', (_req: Request, res: Response) => {
   res.json({ 
     status: 'healthy', 
     timestamp: new Date().toISOString(),
@@ -45,7 +45,7 @@ app.get('/api/health', (req: Request, res: Response) => {
 });
 
 // API Routes (will be added in subsequent phases)
-app.get('/api', (req: Request, res: Response) => {
+app.get('/api', (_req: Request, res: Response) => {
   res.json({
     message: '8Brain GraphRAG API',
     version: '1.0.0',
@@ -60,7 +60,7 @@ app.get('/api', (req: Request, res: Response) => {
 });
 
 // 404 handler
-app.use('*', (req: Request, res: Response) => {
+app.use('*', (_req: Request, res: Response) => {
   res.status(404).json({
     success: false,
     message: 'Route not found'
@@ -68,11 +68,11 @@ app.use('*', (req: Request, res: Response) => {
 });
 
 // Error handling middleware
-app.use((err: Error, req: Request, res: Response, next: any) => {
+app.use((err: Error, _req: Request, res: Response, _next: any) => {
   console.error('Error:', err.message);
   res.status(500).json({
     success: false,
-    message: process.env.NODE_ENV === 'production' 
+    message: process.env['NODE_ENV'] === 'production' 
       ? 'Internal server error' 
       : err.message
   });
@@ -82,7 +82,7 @@ app.use((err: Error, req: Request, res: Response, next: any) => {
 app.listen(PORT, () => {
   console.log(`🧠 8Brain API server running on port ${PORT}`);
   console.log(`🔗 Health check: http://localhost:${PORT}/api/health`);
-  console.log(`🌟 Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`🌟 Environment: ${process.env['NODE_ENV'] || 'development'}`);
 });
 
 export default app;
