@@ -6,6 +6,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { textExtractionService, TextExtractionService } from '../services/TextExtractionService';
 import { embeddingService } from '../services/EmbeddingService';
 import { vectorService } from '../services/VectorService';
+import { Document } from '../models/Document';
+import { authenticateToken } from '../middleware/auth';
 
 const router = express.Router();
 
@@ -49,7 +51,7 @@ const upload = multer({
 });
 
 // Document upload endpoint
-router.post('/upload', upload.array('documents', 10), async (req: Request, res: Response) => {
+router.post('/upload', authenticateToken, upload.array('documents', 10), async (req: Request, res: Response) => {
   try {
     const files = req.files as Express.Multer.File[];
     
@@ -149,6 +151,17 @@ router.post('/upload', upload.array('documents', 10), async (req: Request, res: 
             console.log(`⚠️  OpenAI not available - skipping embedding generation`);
           }
           
+          // Store document in mock database
+          const userId = (req.user as any)?.id || 'demo-user';
+          const document = await Document.create({
+            filename: file.originalname,
+            userId: userId,
+            extractedText: extractedDocument.extractedText,
+            originalText: extractedDocument.extractedText,
+            fileSize: file.size,
+            fileType: file.mimetype
+          });
+
           // Enhanced metadata with complete processing results
           const metadata = {
             id: documentId,
@@ -159,6 +172,7 @@ router.post('/upload', upload.array('documents', 10), async (req: Request, res: 
             uploadedAt: new Date().toISOString(),
             status: 'processed' as const,
             path: file.path,
+            documentId: document._id, // Include database document ID
             
             // Text extraction results
             textExtraction: {
@@ -232,19 +246,23 @@ router.post('/upload', upload.array('documents', 10), async (req: Request, res: 
 });
 
 // Get all user documents
-router.get('/', async (_req: Request, res: Response) => {
+router.get('/', authenticateToken, async (req: Request, res: Response) => {
   try {
-    // TODO: In next phase, implement:
-    // - User authentication middleware
-    // - Database query for user's documents
-    // - Document status and metadata
+    const userId = (req.user as any)?.id || 'demo-user';
+    const documents = await Document.findByUserId(userId);
 
-    // Mock response for now
     res.json({
       success: true,
       data: {
-        documents: [],
-        total: 0,
+        documents: documents.map(doc => ({
+          id: doc._id,
+          filename: doc.filename,
+          uploadedAt: doc.uploadedAt,
+          fileSize: doc.fileSize,
+          fileType: doc.fileType,
+          hasExtractedText: !!doc.extractedText
+        })),
+        total: documents.length,
         page: 1,
         limit: 20
       }

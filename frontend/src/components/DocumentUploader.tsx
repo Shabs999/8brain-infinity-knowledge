@@ -5,6 +5,7 @@ import { Progress } from './ui/progress';
 import { cn } from '@/lib/utils';
 import { NeuralAnimation } from './BrandElements';
 import { Upload, File, CheckCircle, AlertCircle, X } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface UploadedFile {
   id: string;
@@ -51,6 +52,7 @@ export const DocumentUploader: React.FC<DocumentUploaderProps> = ({
   maxFiles = 10,
   className
 }) => {
+  const { token } = useAuth();
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -162,6 +164,9 @@ export const DocumentUploader: React.FC<DocumentUploaderProps> = ({
         // Upload files to backend with text extraction
         const response = await fetch('/api/documents/upload', {
           method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          },
           body: formData,
         });
 

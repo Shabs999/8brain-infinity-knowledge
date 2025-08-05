@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { cn } from '@/lib/utils';
 import axios from 'axios';
+import { useAuth } from '@/contexts/AuthContext';
 import {
   FileText,
   Calendar,
@@ -34,6 +35,7 @@ export const DocumentSelector: React.FC<DocumentSelectorProps> = ({
   selectedDocumentId,
   className
 }) => {
+  const { token } = useAuth();
   const [documents, setDocuments] = useState<Document[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -47,17 +49,34 @@ export const DocumentSelector: React.FC<DocumentSelectorProps> = ({
       setIsLoading(true);
       setError(null);
       
-      const token = localStorage.getItem('token');
+      if (!token) {
+        setError('Authentication required');
+        return;
+      }
+
       const response = await axios.get('/api/documents', {
         headers: { Authorization: `Bearer ${token}` }
       });
 
       if (response.data.success) {
-        // Filter to only show completed documents with extracted text
-        const completedDocs = response.data.data.filter((doc: Document) => 
-          doc.status === 'completed' && doc.extractedText && doc.extractedText.trim().length > 0
+        // Show all documents with extracted text
+        const docsWithText = response.data.data.documents.filter((doc: any) => 
+          doc.hasExtractedText
         );
-        setDocuments(completedDocs);
+        
+        // Map to expected Document interface
+        const mappedDocs: Document[] = docsWithText.map((doc: any) => ({
+          _id: doc.id,
+          filename: doc.filename,
+          originalName: doc.filename,
+          fileSize: doc.fileSize || 0,
+          fileType: doc.fileType || 'unknown',
+          uploadDate: doc.uploadedAt || new Date().toISOString(),
+          status: 'completed' as const,
+          extractedText: 'available' // We know it has text from the filter
+        }));
+        
+        setDocuments(mappedDocs);
       }
     } catch (error: any) {
       console.error('Error fetching documents:', error);

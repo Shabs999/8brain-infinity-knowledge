@@ -4,6 +4,7 @@ import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { cn } from '@/lib/utils';
 import { NeuralAnimation } from './BrandElements';
+import { useAuth } from '@/contexts/AuthContext';
 import axios from 'axios';
 import {
   Brain,
@@ -61,6 +62,7 @@ export const AIInsights: React.FC<AIInsightsProps> = ({
   documentId,
   onInsightGenerated
 }) => {
+  const { token } = useAuth();
   const [availableModels, setAvailableModels] = useState<AIModel[]>([]);
   const [selectedModel, setSelectedModel] = useState<string>('gpt-3.5-turbo');
   const [documentInsights, setDocumentInsights] = useState<DocumentInsights | null>(null);
@@ -76,7 +78,6 @@ export const AIInsights: React.FC<AIInsightsProps> = ({
 
   const fetchAvailableModels = async () => {
     try {
-      const token = localStorage.getItem('token');
       const response = await axios.get('/api/ai/models', {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -116,7 +117,6 @@ export const AIInsights: React.FC<AIInsightsProps> = ({
     setError(null);
     
     try {
-      const token = localStorage.getItem('token');
       const response = await axios.post('/api/ai/summarize', {
         documentId,
         model: selectedModel,
@@ -153,7 +153,6 @@ export const AIInsights: React.FC<AIInsightsProps> = ({
     setError(null);
     
     try {
-      const token = localStorage.getItem('token');
       const response = await axios.post('/api/ai/questions', {
         documentId,
         model: selectedModel,
@@ -191,7 +190,6 @@ export const AIInsights: React.FC<AIInsightsProps> = ({
     setError(null);
     
     try {
-      const token = localStorage.getItem('token');
       const response = await axios.post('/api/ai/concepts', {
         documentId,
         model: selectedModel,

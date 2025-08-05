@@ -71,8 +71,17 @@ router.post('/summarize', authenticateToken, async (req: Request, res: Response)
       });
     }
 
+    // Truncate document to avoid rate limits (approx 8k tokens = 32k chars)
+    const maxChars = model === AIModel.GPT_4 ? 10000 : 
+                     model === AIModel.GPT_4_TURBO ? 25000 : 
+                     50000; // GPT-3.5 has higher limits
+    
+    const truncatedText = documentText.length > maxChars 
+      ? documentText.substring(0, maxChars) + '\n\n[Document truncated due to length...]'
+      : documentText;
+
     const summarizationRequest: SummarizationRequest = {
-      documentText,
+      documentText: truncatedText,
       documentTitle,
       model: model || AIModel.GPT_3_5_TURBO,
       summaryLength: summaryLength || 'medium',
@@ -146,8 +155,17 @@ router.post('/questions', authenticateToken, async (req: Request, res: Response)
       });
     }
 
+    // Truncate document to avoid rate limits
+    const maxChars = model === AIModel.GPT_4 ? 10000 : 
+                     model === AIModel.GPT_4_TURBO ? 25000 : 
+                     50000;
+    
+    const truncatedText = documentText.length > maxChars 
+      ? documentText.substring(0, maxChars) + '\n\n[Document truncated due to length...]'
+      : documentText;
+
     const questionRequest: QuestionGenerationRequest = {
-      documentText,
+      documentText: truncatedText,
       documentTitle,
       model: model || AIModel.GPT_3_5_TURBO,
       questionCount: questionCount || 5,
@@ -223,8 +241,17 @@ router.post('/concepts', authenticateToken, async (req: Request, res: Response) 
       });
     }
 
+    // Truncate document to avoid rate limits
+    const maxChars = model === AIModel.GPT_4 ? 10000 : 
+                     model === AIModel.GPT_4_TURBO ? 25000 : 
+                     50000;
+    
+    const truncatedText = documentText.length > maxChars 
+      ? documentText.substring(0, maxChars) + '\n\n[Document truncated due to length...]'
+      : documentText;
+
     const conceptRequest: ConceptExtractionRequest = {
-      documentText,
+      documentText: truncatedText,
       documentTitle,
       model: model || AIModel.GPT_3_5_TURBO,
       maxConcepts: maxConcepts || 10,
