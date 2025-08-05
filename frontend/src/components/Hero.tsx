@@ -45,7 +45,12 @@ export const Hero: React.FC<HeroProps> = ({ className }) => {
           
           {/* CTA Buttons */}
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-16">
-            <Button size="lg" variant="neural" className="text-lg px-8 py-4 h-auto">
+            <Button 
+              size="lg" 
+              variant="neural" 
+              className="text-lg px-8 py-4 h-auto"
+              onClick={() => window.location.href = '/upload'}
+            >
               Start Building Your Knowledge Graph
             </Button>
             <Button size="lg" variant="outline" className="text-lg px-8 py-4 h-auto">

@@ -1,0 +1,230 @@
+import express, { Request, Response } from 'express';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
+import { v4 as uuidv4 } from 'uuid';
+
+const router = express.Router();
+
+// Ensure uploads directory exists
+const uploadsDir = path.join(__dirname, '../../uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+// Configure multer for file uploads
+const storage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    cb(null, uploadsDir);
+  },
+  filename: (_req, file, cb) => {
+    // Generate unique filename with original extension
+    const uniqueName = `${uuidv4()}${path.extname(file.originalname)}`;
+    cb(null, uniqueName);
+  }
+});
+
+// File filter for supported document types
+const fileFilter = (_req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+  const allowedMimeTypes = [
+    'application/pdf',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'text/plain',
+    'text/markdown',
+    'application/epub+zip'
+  ];
+
+  const allowedExtensions = ['.pdf', '.docx', '.txt', '.md', '.epub'];
+  const fileExtension = path.extname(file.originalname).toLowerCase();
+
+  if (allowedMimeTypes.includes(file.mimetype) || allowedExtensions.includes(fileExtension)) {
+    return cb(null, true);
+  } else {
+    return cb(new Error(`Unsupported file type. Allowed: ${allowedExtensions.join(', ')}`));
+  }
+};
+
+const upload = multer({
+  storage,
+  fileFilter,
+  limits: {
+    fileSize: 50 * 1024 * 1024, // 50MB limit
+    files: 10 // Maximum 10 files per upload
+  }
+});
+
+// Document upload endpoint
+router.post('/upload', upload.array('documents', 10), async (req: Request, res: Response) => {
+  try {
+    const files = req.files as Express.Multer.File[];
+    
+    if (!files || files.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'No files provided'
+      });
+    }
+
+    // Process each uploaded file
+    const processedFiles = await Promise.all(
+      files.map(async (file) => {
+        const documentId = uuidv4();
+        
+        // Basic file metadata
+        const metadata = {
+          id: documentId,
+          originalName: file.originalname,
+          filename: file.filename,
+          mimetype: file.mimetype,
+          size: file.size,
+          uploadedAt: new Date().toISOString(),
+          status: 'uploaded' as const,
+          path: file.path
+        };
+
+        // TODO: In next phase, add:
+        // - Text extraction
+        // - Concept extraction
+        // - Vector embedding generation
+        // - Neo4j graph population
+
+        return metadata;
+      })
+    );
+
+    return res.json({
+      success: true,
+      message: `Successfully uploaded ${files.length} file(s)`,
+      data: {
+        files: processedFiles,
+        totalFiles: files.length,
+        totalSize: files.reduce((sum, file) => sum + file.size, 0)
+      }
+    });
+
+  } catch (error) {
+    console.error('Upload error:', error);
+    
+    // Clean up uploaded files on error
+    if (req.files) {
+      const files = req.files as Express.Multer.File[];
+      files.forEach(file => {
+        if (fs.existsSync(file.path)) {
+          fs.unlinkSync(file.path);
+        }
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      message: error instanceof Error ? error.message : 'Upload failed'
+    });
+  }
+});
+
+// Get all user documents
+router.get('/', async (_req: Request, res: Response) => {
+  try {
+    // TODO: In next phase, implement:
+    // - User authentication middleware
+    // - Database query for user's documents
+    // - Document status and metadata
+
+    // Mock response for now
+    res.json({
+      success: true,
+      data: {
+        documents: [],
+        total: 0,
+        page: 1,
+        limit: 20
+      }
+    });
+  } catch (error) {
+    console.error('Get documents error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to retrieve documents'
+    });
+  }
+});
+
+// Get document by ID
+router.get('/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    
+    // TODO: In next phase, implement:
+    // - Document retrieval from database
+    // - File access permissions
+    // - Document metadata and processing status
+
+    res.json({
+      success: true,
+      data: {
+        id,
+        message: 'Document endpoint - implementation pending'
+      }
+    });
+  } catch (error) {
+    console.error('Get document error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to retrieve document'
+    });
+  }
+});
+
+// Delete document
+router.delete('/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    
+    // TODO: In next phase, implement:
+    // - Document deletion from database
+    // - File cleanup from storage
+    // - Vector and graph data cleanup
+
+    res.json({
+      success: true,
+      message: `Document ${id} deletion - implementation pending`
+    });
+  } catch (error) {
+    console.error('Delete document error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete document'
+    });
+  }
+});
+
+// Document processing status
+router.get('/:id/status', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    
+    // TODO: In next phase, implement:
+    // - Processing status from database
+    // - Real-time processing updates
+    // - Error status and messages
+
+    res.json({
+      success: true,
+      data: {
+        id,
+        status: 'completed',
+        progress: 100,
+        stage: 'indexed',
+        message: 'Document processed successfully'
+      }
+    });
+  } catch (error) {
+    console.error('Get status error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get processing status'
+    });
+  }
+});
+
+export default router;

@@ -22,8 +22,8 @@ export const Header: React.FC<HeaderProps> = ({ className }) => {
           
           {/* Navigation */}
           <nav className="hidden md:flex items-center space-x-8">
-            <NavLink href="#" active>Dashboard</NavLink>
-            <NavLink href="#">Documents</NavLink>
+            <NavLink href="/">Dashboard</NavLink>
+            <NavLink href="/upload">Upload</NavLink>
             <NavLink href="#">Graph</NavLink>
             <NavLink href="#">Analytics</NavLink>
           </nav>

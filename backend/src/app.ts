@@ -44,7 +44,12 @@ app.get('/api/health', (_req: Request, res: Response) => {
   });
 });
 
-// API Routes (will be added in subsequent phases)
+// Import routes
+import documentsRouter from './routes/documents';
+
+// API Routes
+app.use('/api/documents', documentsRouter);
+
 app.get('/api', (_req: Request, res: Response) => {
   res.json({
     message: '8Brain GraphRAG API',
