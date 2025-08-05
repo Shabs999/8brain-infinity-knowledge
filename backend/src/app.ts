@@ -47,11 +47,13 @@ app.get('/api/health', (_req: Request, res: Response) => {
 // Import routes
 import documentsRouter from './routes/documents';
 import databaseRouter from './routes/database';
+import authRouter from './routes/auth';
 
 // Import database manager for initialization
 import { databaseManager } from './services/DatabaseManager';
 
 // API Routes
+app.use('/api/auth', authRouter);
 app.use('/api/documents', documentsRouter);
 app.use('/api/database', databaseRouter);
 
@@ -61,8 +63,8 @@ app.get('/api', (_req: Request, res: Response) => {
     version: '1.0.0',
     endpoints: {
       health: '/api/health',
-      database: '/api/database/*',
       auth: '/api/auth/*',
+      database: '/api/database/*',
       documents: '/api/documents/*',
       ai: '/api/ai/*',
       graph: '/api/graph/*'

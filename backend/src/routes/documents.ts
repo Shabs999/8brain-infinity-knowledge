@@ -3,6 +3,7 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
+import { textExtractionService, TextExtractionService } from '../services/TextExtractionService';
 
 const router = express.Router();
 
@@ -26,21 +27,13 @@ const storage = multer.diskStorage({
 
 // File filter for supported document types
 const fileFilter = (_req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
-  const allowedMimeTypes = [
-    'application/pdf',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'text/plain',
-    'text/markdown',
-    'application/epub+zip'
-  ];
-
-  const allowedExtensions = ['.pdf', '.docx', '.txt', '.md', '.epub'];
+  const allowedExtensions = ['.pdf', '.docx', '.txt', '.md'];
   const fileExtension = path.extname(file.originalname).toLowerCase();
 
-  if (allowedMimeTypes.includes(file.mimetype) || allowedExtensions.includes(fileExtension)) {
+  if (TextExtractionService.isSupported(file.mimetype) || allowedExtensions.includes(fileExtension)) {
     return cb(null, true);
   } else {
-    return cb(new Error(`Unsupported file type. Allowed: ${allowedExtensions.join(', ')}`));
+    return cb(new Error(`Unsupported file type. Supported: PDF, DOCX, TXT, MD`));
   }
 };
 
@@ -65,30 +58,73 @@ router.post('/upload', upload.array('documents', 10), async (req: Request, res: 
       });
     }
 
-    // Process each uploaded file
+    // Process each uploaded file with text extraction
     const processedFiles = await Promise.all(
       files.map(async (file) => {
         const documentId = uuidv4();
         
-        // Basic file metadata
-        const metadata = {
-          id: documentId,
-          originalName: file.originalname,
-          filename: file.filename,
-          mimetype: file.mimetype,
-          size: file.size,
-          uploadedAt: new Date().toISOString(),
-          status: 'uploaded' as const,
-          path: file.path
-        };
+        try {
+          console.log(`📄 Processing document: ${file.originalname}`);
+          
+          // Extract text from the uploaded document
+          const extractedDocument = await textExtractionService.extractText(
+            file.path,
+            file.mimetype
+          );
+          
+          console.log(`✅ Text extraction completed for ${file.originalname}`);
+          console.log(`   📝 Extracted ${extractedDocument.textLength} characters`);
+          console.log(`   📦 Created ${extractedDocument.chunks.length} chunks`);
+          
+          // Enhanced metadata with extraction results
+          const metadata = {
+            id: documentId,
+            originalName: file.originalname,
+            filename: file.filename,
+            mimetype: file.mimetype,
+            size: file.size,
+            uploadedAt: new Date().toISOString(),
+            status: 'processed' as const,
+            path: file.path,
+            
+            // Text extraction results
+            textExtraction: {
+              extractedText: extractedDocument.extractedText,
+              textLength: extractedDocument.textLength,
+              chunkCount: extractedDocument.chunks.length,
+              processingTime: extractedDocument.processingTime,
+              metadata: extractedDocument.metadata
+            },
+            
+            // Next phase: Vector embeddings and graph processing
+            vectorProcessing: {
+              status: 'pending',
+              message: 'Ready for embedding generation'
+            },
+            graphProcessing: {
+              status: 'pending', 
+              message: 'Ready for knowledge graph construction'
+            }
+          };
 
-        // TODO: In next phase, add:
-        // - Text extraction
-        // - Concept extraction
-        // - Vector embedding generation
-        // - Neo4j graph population
-
-        return metadata;
+          return metadata;
+          
+        } catch (error) {
+          console.error(`❌ Text extraction failed for ${file.originalname}:`, error);
+          
+          // Return metadata with error status
+          return {
+            id: documentId,
+            originalName: file.originalname,
+            filename: file.filename,
+            mimetype: file.mimetype,
+            size: file.size,
+            uploadedAt: new Date().toISOString(),
+            status: 'failed' as const,
+            path: file.path,
+            error: error instanceof Error ? error.message : 'Text extraction failed'
+          };
+        }
       })
     );
 
