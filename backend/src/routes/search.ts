@@ -1,6 +1,6 @@
 import express, { Request, Response } from 'express';
 import { embeddingService } from '../services/EmbeddingService';
-import { vectorService } from '../services/VectorService';
+import { semanticSearchService } from '../services/SemanticSearchService';
 import { authenticateToken } from '../middleware/auth';
 
 const router = express.Router();
@@ -64,60 +64,31 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
     const searchStartTime = Date.now();
 
     try {
-      // Step 1: Generate embedding for the search query
-      console.log('🤖 Generating query embedding...');
-      const queryEmbedding = await embeddingService.generateQueryEmbedding(trimmedQuery);
+      // Use our in-memory semantic search service
+      console.log('🔍 Using in-memory semantic search...');
       
-      // Step 2: Build filter for vector search
-      const vectorFilter: Record<string, any> = {};
-      
-      // Add user filter to ensure users only search their own documents
-      if (req.user?.id) {
-        vectorFilter['userId'] = req.user.id;
-      }
-      
-      // Add document type filter if specified
-      if (filters?.documentType) {
-        vectorFilter['documentType'] = filters.documentType;
-      }
-      
-      // Add date range filter if specified
-      if (filters?.dateRange) {
-        vectorFilter['createdAt'] = {
-          $gte: filters.dateRange.start.toISOString(),
-          $lte: filters.dateRange.end.toISOString()
-        };
-      }
+      const searchResponse = await semanticSearchService.search({
+        query: trimmedQuery,
+        limit,
+        threshold: 0.5 // Require at least 50% similarity for meaningful results
+      });
 
-      // Step 3: Perform similarity search in Pinecone
-      console.log('📊 Searching vector database...');
-      const searchOptions: Parameters<typeof vectorService.similaritySearch>[1] = {
-        topK: limit,
-        includeMetadata: true
-      };
-      
-      if (Object.keys(vectorFilter).length > 0) {
-        searchOptions.filter = vectorFilter;
-      }
-      
-      const searchResults = await vectorService.similaritySearch(queryEmbedding, searchOptions);
+      console.log(`✅ Found ${searchResponse.results.length} results`);
 
-      console.log(`✅ Found ${searchResults.length} results`);
-
-      // Step 4: Format results for response
-      const formattedResults: SearchResult[] = searchResults.map(result => ({
+      // Format results to match expected interface
+      const formattedResults: SearchResult[] = searchResponse.results.map(result => ({
         id: result.id,
-        documentId: result.metadata?.['documentId'] || '',
-        documentName: result.metadata?.['documentName'] || 'Unknown',
-        documentType: result.metadata?.['documentType'] || 'unknown',
-        content: result.metadata?.['content'] || '',
-        score: result.score,
+        documentId: result.documentId,
+        documentName: result.documentName,
+        documentType: result.metadata?.documentType || 'pdf',
+        content: result.chunkText,
+        score: result.similarity,
         metadata: {
-          chunkIndex: result.metadata?.['chunkIndex'] || 0,
-          textLength: result.metadata?.['textLength'] || 0,
-          createdAt: result.metadata?.['createdAt'] || new Date().toISOString()
+          chunkIndex: result.chunkIndex,
+          textLength: result.chunkText.length,
+          createdAt: result.metadata?.createdAt || new Date().toISOString()
         },
-        highlights: generateHighlights(result.metadata?.['content'] || '', trimmedQuery)
+        highlights: generateHighlights(result.chunkText, trimmedQuery)
       }));
 
       const searchTime = Date.now() - searchStartTime;

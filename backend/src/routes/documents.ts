@@ -6,6 +6,9 @@ import { v4 as uuidv4 } from 'uuid';
 import { textExtractionService, TextExtractionService } from '../services/TextExtractionService';
 import { embeddingService } from '../services/EmbeddingService';
 import { vectorService } from '../services/VectorService';
+import { semanticSearchService } from '../services/SemanticSearchService';
+import { Document } from '../models/Document';
+import { authenticateToken } from '../middleware/auth';
 
 const router = express.Router();
 
@@ -136,6 +139,15 @@ router.post('/upload', upload.array('documents', 10), async (req: Request, res: 
                   processingTime: embeddingBatch.processingTime,
                   storageError: vectorError instanceof Error ? vectorError.message : 'Unknown error'
                 };
+              }
+
+              // Step 4: Store embeddings in semantic search service for immediate use
+              try {
+                console.log(`🔍 Storing embeddings in semantic search service...`);
+                semanticSearchService.storeEmbeddings(documentId, embeddingBatch.vectors);
+                console.log(`✅ Embeddings stored in semantic search service`);
+              } catch (searchError) {
+                console.warn(`⚠️  Semantic search storage failed: ${searchError}`);
               }
 
             } catch (embeddingError) {
