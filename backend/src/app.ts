@@ -49,6 +49,7 @@ import documentsRouter from './routes/documents';
 import databaseRouter from './routes/database';
 import authRouter from './routes/auth';
 import searchRouter from './routes/search';
+import aiRouter from './routes/ai';
 
 // Import database manager for initialization
 import { databaseManager } from './services/DatabaseManager';
@@ -58,6 +59,7 @@ app.use('/api/auth', authRouter);
 app.use('/api/documents', documentsRouter);
 app.use('/api/database', databaseRouter);
 app.use('/api/search', searchRouter);
+app.use('/api/ai', aiRouter);
 
 app.get('/api', (_req: Request, res: Response) => {
   res.json({
