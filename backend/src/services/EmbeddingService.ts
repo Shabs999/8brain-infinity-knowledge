@@ -117,6 +117,11 @@ export class EmbeddingService {
         // Process each embedding in the response
         response.data.forEach((embeddingData, index) => {
           const chunk = batch[index];
+          if (!chunk) {
+            console.warn(`Missing chunk at index ${index}`);
+            return;
+          }
+          
           const embedding = embeddingData.embedding;
 
           // Validate embedding dimensions
@@ -198,7 +203,12 @@ export class EmbeddingService {
         encoding_format: 'float'
       });
 
-      const embedding = response.data[0].embedding;
+      const embeddingData = response.data[0];
+      if (!embeddingData) {
+        throw new Error('No embedding data received from OpenAI');
+      }
+
+      const embedding = embeddingData.embedding;
 
       if (embedding.length !== this.EMBEDDING_DIMENSIONS) {
         throw new Error(`Invalid embedding dimensions: expected ${this.EMBEDDING_DIMENSIONS}, got ${embedding.length}`);
@@ -226,9 +236,11 @@ export class EmbeddingService {
     let normB = 0;
 
     for (let i = 0; i < vectorA.length; i++) {
-      dotProduct += vectorA[i] * vectorB[i];
-      normA += vectorA[i] * vectorA[i];
-      normB += vectorB[i] * vectorB[i];
+      const valA = vectorA[i] ?? 0;
+      const valB = vectorB[i] ?? 0;
+      dotProduct += valA * valB;
+      normA += valA * valA;
+      normB += valB * valB;
     }
 
     normA = Math.sqrt(normA);
@@ -260,7 +272,7 @@ export class EmbeddingService {
         score: similarity,
         text: vector.text,
         metadata: vector.metadata,
-        documentName: vector.metadata.documentName
+        documentName: vector.metadata?.documentName || 'Unknown Document'
       };
     });
 

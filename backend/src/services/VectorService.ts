@@ -101,7 +101,7 @@ export class VectorService {
         textLength: embeddingVector.metadata.textLength,
         wordCount: embeddingVector.metadata.wordCount,
         estimatedTokens: embeddingVector.metadata.estimatedTokens,
-        userId: userId,
+        ...(userId && { userId }),
         concepts: embeddingVector.metadata.documentMetadata?.concepts || [],
         createdAt: embeddingVector.createdAt.toISOString()
       }
@@ -243,3 +243,5 @@ export class VectorService {
     }
   }
 }
+
+export const vectorService = new VectorService();

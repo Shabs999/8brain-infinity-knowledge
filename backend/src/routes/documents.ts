@@ -4,6 +4,8 @@ import path from 'path';
 import fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 import { textExtractionService, TextExtractionService } from '../services/TextExtractionService';
+import { embeddingService } from '../services/EmbeddingService';
+import { vectorService } from '../services/VectorService';
 
 const router = express.Router();
 
@@ -64,9 +66,9 @@ router.post('/upload', upload.array('documents', 10), async (req: Request, res: 
         const documentId = uuidv4();
         
         try {
-          console.log(`📄 Processing document: ${file.originalname}`);
+          console.log(`🧠 Processing document: ${file.originalname}`);
           
-          // Extract text from the uploaded document
+          // Step 1: Extract text from the uploaded document
           const extractedDocument = await textExtractionService.extractText(
             file.path,
             file.mimetype
@@ -76,7 +78,78 @@ router.post('/upload', upload.array('documents', 10), async (req: Request, res: 
           console.log(`   📝 Extracted ${extractedDocument.textLength} characters`);
           console.log(`   📦 Created ${extractedDocument.chunks.length} chunks`);
           
-          // Enhanced metadata with extraction results
+          let vectorProcessing: {
+            status: 'pending' | 'completed' | 'partial' | 'failed';
+            message: string;
+          } = {
+            status: 'pending',
+            message: 'Ready for embedding generation'
+          };
+          
+          let embeddingResults = null;
+
+          // Step 2: Generate embeddings if OpenAI is available
+          if (embeddingService.isAvailable()) {
+            try {
+              console.log(`🤖 Generating embeddings for ${file.originalname}...`);
+              
+              const embeddingBatch = await embeddingService.generateEmbeddings(
+                extractedDocument.chunks,
+                documentId,
+                file.originalname,
+                file.mimetype,
+                extractedDocument.metadata
+              );
+
+              console.log(`✅ Embedding generation completed for ${file.originalname}`);
+              console.log(`   🎯 Generated ${embeddingBatch.totalVectors} vectors`);
+              console.log(`   💰 Cost: $${embeddingBatch.cost.toFixed(4)}`);
+              console.log(`   📊 Tokens used: ${embeddingBatch.totalTokensUsed.toLocaleString()}`);
+
+              // Step 3: Store vectors in Pinecone if available
+              try {
+                await vectorService.storeBatch(embeddingBatch);
+                
+                vectorProcessing = {
+                  status: 'completed',
+                  message: `Generated ${embeddingBatch.totalVectors} vectors and stored in Pinecone`
+                };
+
+                embeddingResults = {
+                  vectorCount: embeddingBatch.totalVectors,
+                  tokensUsed: embeddingBatch.totalTokensUsed,
+                  cost: embeddingBatch.cost,
+                  processingTime: embeddingBatch.processingTime
+                };
+
+              } catch (vectorError) {
+                console.warn(`⚠️  Vector storage failed: ${vectorError}`);
+                vectorProcessing = {
+                  status: 'partial',
+                  message: `Embeddings generated but vector storage failed: ${vectorError instanceof Error ? vectorError.message : 'Unknown error'}`
+                };
+
+                embeddingResults = {
+                  vectorCount: embeddingBatch.totalVectors,
+                  tokensUsed: embeddingBatch.totalTokensUsed,
+                  cost: embeddingBatch.cost,
+                  processingTime: embeddingBatch.processingTime,
+                  storageError: vectorError instanceof Error ? vectorError.message : 'Unknown error'
+                };
+              }
+
+            } catch (embeddingError) {
+              console.error(`❌ Embedding generation failed: ${embeddingError}`);
+              vectorProcessing = {
+                status: 'failed',
+                message: `Embedding generation failed: ${embeddingError instanceof Error ? embeddingError.message : 'Unknown error'}`
+              };
+            }
+          } else {
+            console.log(`⚠️  OpenAI not available - skipping embedding generation`);
+          }
+          
+          // Enhanced metadata with complete processing results
           const metadata = {
             id: documentId,
             originalName: file.originalname,
@@ -96,13 +169,13 @@ router.post('/upload', upload.array('documents', 10), async (req: Request, res: 
               metadata: extractedDocument.metadata
             },
             
-            // Next phase: Vector embeddings and graph processing
-            vectorProcessing: {
-              status: 'pending',
-              message: 'Ready for embedding generation'
-            },
+            // Vector processing results
+            vectorProcessing,
+            embeddingResults,
+            
+            // Next phase: Knowledge graph processing
             graphProcessing: {
-              status: 'pending', 
+              status: 'pending' as const, 
               message: 'Ready for knowledge graph construction'
             }
           };
