@@ -47,8 +47,8 @@ export const Header: React.FC<HeaderProps> = ({ className }) => {
               <NavLink href="/dashboard">Dashboard</NavLink>
               <NavLink href="/upload">Upload</NavLink>
               <NavLink href="/search">Search</NavLink>
-              <NavLink href="#">Graph</NavLink>
-              <NavLink href="#">Analytics</NavLink>
+              <NavLink href="/ai">AI Analysis</NavLink>
+              <NavLink href="#" disabled>Analytics</NavLink>
             </nav>
           )}
 
