@@ -1,15 +1,23 @@
 import { Pinecone } from '@pinecone-database/pinecone';
+import { EmbeddingVector, EmbeddingBatch } from './EmbeddingService';
 
-// Local type definitions to avoid import issues
+// Enhanced type definitions for 8Brain vectors
 interface VectorRecord {
   id: string;
   values: number[];
   metadata: {
-    userId: string;
     documentId: string;
-    content: string;
-    concepts: string[];
+    documentName: string;
+    documentType: string;
+    chunkId: string;
     chunkIndex: number;
+    content: string;
+    textLength: number;
+    wordCount: number;
+    estimatedTokens: number;
+    userId?: string;
+    concepts?: string[];
+    createdAt: string;
   };
 }
 
@@ -54,7 +62,58 @@ export class VectorService {
     }
   }
 
+  /**
+   * Convert EmbeddingBatch to VectorRecords and store in Pinecone
+   */
+  async storeBatch(embeddingBatch: EmbeddingBatch, userId?: string): Promise<void> {
+    if (!this.pinecone) {
+      console.log('📊 Pinecone not available - skipping vector storage');
+      return;
+    }
+
+    console.log(`📊 Storing ${embeddingBatch.totalVectors} vectors for ${embeddingBatch.documentName}`);
+
+    try {
+      const vectorRecords = embeddingBatch.vectors.map(vector => this.convertEmbeddingToVector(vector, userId));
+      await this.upsert(vectorRecords);
+      
+      console.log(`✅ Successfully stored ${vectorRecords.length} vectors in Pinecone`);
+    } catch (error) {
+      console.error(`❌ Failed to store embedding batch:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Convert EmbeddingVector to VectorRecord format
+   */
+  private convertEmbeddingToVector(embeddingVector: EmbeddingVector, userId?: string): VectorRecord {
+    return {
+      id: embeddingVector.id,
+      values: embeddingVector.embedding,
+      metadata: {
+        documentId: embeddingVector.documentId,
+        documentName: embeddingVector.metadata.documentName,
+        documentType: embeddingVector.metadata.documentType,
+        chunkId: embeddingVector.chunkId,
+        chunkIndex: embeddingVector.metadata.chunkIndex,
+        content: embeddingVector.text,
+        textLength: embeddingVector.metadata.textLength,
+        wordCount: embeddingVector.metadata.wordCount,
+        estimatedTokens: embeddingVector.metadata.estimatedTokens,
+        userId: userId,
+        concepts: embeddingVector.metadata.documentMetadata?.concepts || [],
+        createdAt: embeddingVector.createdAt.toISOString()
+      }
+    };
+  }
+
   async upsert(vectors: VectorRecord[]): Promise<void> {
+    if (!this.pinecone) {
+      console.log('📊 Pinecone not available - skipping upsert');
+      return;
+    }
+
     try {
       const index = this.pinecone.index(this.indexName);
       
@@ -63,18 +122,17 @@ export class VectorService {
         id: vector.id,
         values: vector.values,
         metadata: {
-          userId: vector.metadata.userId,
-          documentId: vector.metadata.documentId,
-          content: vector.metadata.content,
-          concepts: JSON.stringify(vector.metadata.concepts),
-          chunkIndex: vector.metadata.chunkIndex
+          ...vector.metadata,
+          concepts: Array.isArray(vector.metadata.concepts) 
+            ? JSON.stringify(vector.metadata.concepts) 
+            : vector.metadata.concepts || '[]'
         }
       }));
 
       await index.upsert(pineconeVectors);
-      console.log(`Upserted ${vectors.length} vectors to Pinecone`);
+      console.log(`✅ Upserted ${vectors.length} vectors to Pinecone index: ${this.indexName}`);
     } catch (error) {
-      console.error('Failed to upsert vectors:', error);
+      console.error('❌ Failed to upsert vectors:', error);
       throw error;
     }
   }
