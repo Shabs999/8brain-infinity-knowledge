@@ -6,7 +6,6 @@ import axios from 'axios';
 import {
   FileText,
   Calendar,
-  FileSize,
   CheckCircle,
   RefreshCw,
   Sparkles
@@ -147,7 +146,7 @@ export const DocumentSelector: React.FC<DocumentSelectorProps> = ({
         <CardTitle className="flex items-center gap-2">
           <FileText className="h-5 w-5" />
           Select Document to Analyze
-        </div>
+        </CardTitle>
         <p className="text-sm text-neutral-gray-600">
           Choose a document to generate AI insights, summaries, and analysis.
         </p>
@@ -185,7 +184,7 @@ export const DocumentSelector: React.FC<DocumentSelectorProps> = ({
                   
                   <div className="flex items-center space-x-4 text-xs text-neutral-gray-500">
                     <div className="flex items-center space-x-1">
-                      <FileSize className="h-3 w-3" />
+                      <FileText className="h-3 w-3" />
                       <span>{formatFileSize(document.fileSize)}</span>
                     </div>
                     

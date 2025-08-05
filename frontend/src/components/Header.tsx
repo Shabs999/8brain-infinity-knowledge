@@ -48,7 +48,7 @@ export const Header: React.FC<HeaderProps> = ({ className }) => {
               <NavLink href="/upload">Upload</NavLink>
               <NavLink href="/search">Search</NavLink>
               <NavLink href="/ai">AI Analysis</NavLink>
-              <NavLink href="#" disabled>Analytics</NavLink>
+              <NavLink href="#">Analytics</NavLink>
             </nav>
           )}
 

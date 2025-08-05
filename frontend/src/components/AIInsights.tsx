@@ -14,11 +14,9 @@ import {
   Zap,
   Clock,
   DollarSign,
-  Settings,
   RefreshCw,
   ChevronDown,
   ChevronRight,
-  Download,
   Copy,
   Check
 } from 'lucide-react';

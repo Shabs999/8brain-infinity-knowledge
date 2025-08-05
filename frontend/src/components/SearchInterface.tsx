@@ -13,7 +13,6 @@ import {
   Sparkles, 
   TrendingUp,
   Clock,
-  Filter,
   ChevronRight,
   Loader2
 } from 'lucide-react';
