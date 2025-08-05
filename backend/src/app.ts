@@ -46,9 +46,14 @@ app.get('/api/health', (_req: Request, res: Response) => {
 
 // Import routes
 import documentsRouter from './routes/documents';
+import databaseRouter from './routes/database';
+
+// Import database manager for initialization
+import { databaseManager } from './services/DatabaseManager';
 
 // API Routes
 app.use('/api/documents', documentsRouter);
+app.use('/api/database', databaseRouter);
 
 app.get('/api', (_req: Request, res: Response) => {
   res.json({
@@ -56,6 +61,7 @@ app.get('/api', (_req: Request, res: Response) => {
     version: '1.0.0',
     endpoints: {
       health: '/api/health',
+      database: '/api/database/*',
       auth: '/api/auth/*',
       documents: '/api/documents/*',
       ai: '/api/ai/*',
@@ -83,11 +89,42 @@ app.use((err: Error, _req: Request, res: Response, _next: any) => {
   });
 });
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`🧠 8Brain API server running on port ${PORT}`);
-  console.log(`🔗 Health check: http://localhost:${PORT}/api/health`);
-  console.log(`🌟 Environment: ${process.env['NODE_ENV'] || 'development'}`);
+// Initialize databases and start server
+async function startServer() {
+  try {
+    // Initialize database connections
+    console.log('🔄 Starting 8Brain API server...');
+    await databaseManager.initialize();
+    
+    // Start HTTP server
+    app.listen(PORT, () => {
+      console.log(`🧠 8Brain API server running on port ${PORT}`);
+      console.log(`🔗 Health check: http://localhost:${PORT}/api/health`);
+      console.log(`📊 Database health: http://localhost:${PORT}/api/database/health`);
+      console.log(`📈 Database stats: http://localhost:${PORT}/api/database/stats`);
+      console.log(`🌟 Environment: ${process.env['NODE_ENV'] || 'development'}`);
+    });
+    
+  } catch (error) {
+    console.error('❌ Failed to start server:', error);
+    process.exit(1);
+  }
+}
+
+// Handle graceful shutdown
+process.on('SIGTERM', async () => {
+  console.log('🛑 Received SIGTERM, shutting down gracefully...');
+  await databaseManager.close();
+  process.exit(0);
 });
+
+process.on('SIGINT', async () => {
+  console.log('🛑 Received SIGINT, shutting down gracefully...');
+  await databaseManager.close();
+  process.exit(0);
+});
+
+// Start the server
+startServer();
 
 export default app;
