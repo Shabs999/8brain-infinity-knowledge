@@ -6,12 +6,12 @@ import { Document } from '../models/Document';
 const router = Router();
 
 // Get available AI models
-router.get('/models', authenticateToken, async (req: Request, res: Response) => {
+router.get('/models', authenticateToken, async (_req: Request, res: Response) => {
   try {
     const availableModels = aiModelService.getAvailableModels();
     const modelStatus = await aiModelService.healthCheck();
     
-    res.json({
+    return res.json({
       success: true,
       data: {
         availableModels,
@@ -20,7 +20,7 @@ router.get('/models', authenticateToken, async (req: Request, res: Response) => 
     });
   } catch (error) {
     console.error('Error fetching AI models:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to fetch available AI models'
     });
@@ -81,7 +81,7 @@ router.post('/summarize', authenticateToken, async (req: Request, res: Response)
 
     const summary = await aiModelService.summarizeDocument(summarizationRequest);
 
-    res.json({
+    return res.json({
       success: true,
       data: {
         summary: summary.content,
@@ -95,7 +95,7 @@ router.post('/summarize', authenticateToken, async (req: Request, res: Response)
 
   } catch (error) {
     console.error('Error summarizing document:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: error instanceof Error ? error.message : 'Failed to summarize document'
     });
@@ -157,7 +157,7 @@ router.post('/questions', authenticateToken, async (req: Request, res: Response)
 
     const questions = await aiModelService.generateQuestions(questionRequest);
 
-    res.json({
+    return res.json({
       success: true,
       data: {
         questions: questions.content,
@@ -172,7 +172,7 @@ router.post('/questions', authenticateToken, async (req: Request, res: Response)
 
   } catch (error) {
     console.error('Error generating questions:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: error instanceof Error ? error.message : 'Failed to generate questions'
     });
@@ -234,7 +234,7 @@ router.post('/concepts', authenticateToken, async (req: Request, res: Response) 
     const concepts = await aiModelService.extractConcepts(conceptRequest);
 
     // Try to parse JSON response
-    let parsedConcepts = [];
+    let parsedConcepts: any = [];
     try {
       parsedConcepts = JSON.parse(concepts.content);
     } catch (parseError) {
@@ -242,7 +242,7 @@ router.post('/concepts', authenticateToken, async (req: Request, res: Response) 
       parsedConcepts = concepts.content;
     }
 
-    res.json({
+    return res.json({
       success: true,
       data: {
         concepts: parsedConcepts,
@@ -257,7 +257,7 @@ router.post('/concepts', authenticateToken, async (req: Request, res: Response) 
 
   } catch (error) {
     console.error('Error extracting concepts:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: error instanceof Error ? error.message : 'Failed to extract concepts'
     });
@@ -363,7 +363,7 @@ router.post('/analyze', authenticateToken, async (req: Request, res: Response) =
       }
     }
 
-    res.json({
+    return res.json({
       success: true,
       data: {
         documentId,
@@ -377,7 +377,7 @@ router.post('/analyze', authenticateToken, async (req: Request, res: Response) =
 
   } catch (error) {
     console.error('Error analyzing document:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: error instanceof Error ? error.message : 'Failed to analyze document'
     });
@@ -385,12 +385,12 @@ router.post('/analyze', authenticateToken, async (req: Request, res: Response) =
 });
 
 // Health check for AI services
-router.get('/health', async (req: Request, res: Response) => {
+router.get('/health', async (_req: Request, res: Response) => {
   try {
     const health = await aiModelService.healthCheck();
     const availableModels = aiModelService.getAvailableModels();
     
-    res.json({
+    return res.json({
       success: true,
       data: {
         services: health,
@@ -400,7 +400,7 @@ router.get('/health', async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error('Error checking AI service health:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to check AI service health'
     });

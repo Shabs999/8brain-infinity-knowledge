@@ -14,7 +14,7 @@ export enum AIModel {
 export interface AIResponse {
   content: string;
   model: AIModel;
-  usage?: {
+  usage: {
     promptTokens: number;
     completionTokens: number;
     totalTokens: number;
@@ -61,13 +61,13 @@ export class AIModelService {
 
   constructor() {
     // Initialize OpenAI if API key is available
-    if (process.env.OPENAI_API_KEY) {
-      this.openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    if (process.env['OPENAI_API_KEY']) {
+      this.openai = new OpenAI({ apiKey: process.env['OPENAI_API_KEY'] });
     }
 
     // Initialize Anthropic if API key is available
-    if (process.env.ANTHROPIC_API_KEY) {
-      this.anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    if (process.env['ANTHROPIC_API_KEY']) {
+      this.anthropic = new Anthropic({ apiKey: process.env['ANTHROPIC_API_KEY'] });
     }
   }
 
@@ -147,7 +147,11 @@ export class AIModelService {
         promptTokens: usage.prompt_tokens,
         completionTokens: usage.completion_tokens,
         totalTokens: usage.total_tokens
-      } : undefined,
+      } : {
+        promptTokens: 0,
+        completionTokens: 0,
+        totalTokens: 0
+      },
       cost
     };
   }
@@ -170,7 +174,7 @@ export class AIModelService {
       model: request.model,
       max_tokens: request.maxTokens || 1000,
       temperature: request.temperature || 0.7,
-      system: request.systemPrompt,
+      ...(request.systemPrompt && { system: request.systemPrompt }),
       messages
     });
 
@@ -311,12 +315,12 @@ Please format your response as a JSON array of concepts, where each concept has 
           messages: [{ role: 'user', content: 'Hello' }],
           max_tokens: 5
         });
-        health.openai = true;
+        health['openai'] = true;
       } else {
-        health.openai = false;
+        health['openai'] = false;
       }
     } catch (error) {
-      health.openai = false;
+      health['openai'] = false;
     }
 
     try {
@@ -327,12 +331,12 @@ Please format your response as a JSON array of concepts, where each concept has 
           max_tokens: 5,
           messages: [{ role: 'user', content: 'Hello' }]
         });
-        health.anthropic = true;
+        health['anthropic'] = true;
       } else {
-        health.anthropic = false;
+        health['anthropic'] = false;
       }
     } catch (error) {
-      health.anthropic = false;
+      health['anthropic'] = false;
     }
 
     return health;
