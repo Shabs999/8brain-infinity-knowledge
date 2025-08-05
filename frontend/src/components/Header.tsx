@@ -47,8 +47,8 @@ export const Header: React.FC<HeaderProps> = ({ className }) => {
               <NavLink href="/dashboard">Dashboard</NavLink>
               <NavLink href="/upload">Upload</NavLink>
               <NavLink href="/search">Search</NavLink>
-              <NavLink href="#">Graph</NavLink>
-              <NavLink href="#">Analytics</NavLink>
+              <NavLink href="/graph">Graph</NavLink>
+              <NavLink href="#" disabled>Analytics</NavLink>
             </nav>
           )}
 
@@ -126,23 +126,36 @@ interface NavLinkProps {
   href: string;
   children: React.ReactNode;
   active?: boolean;
+  disabled?: boolean;
   className?: string;
 }
 
-const NavLink: React.FC<NavLinkProps> = ({ href, children, active = false, className }) => {
+const NavLink: React.FC<NavLinkProps> = ({ href, children, active = false, disabled = false, className }) => {
+  const navigate = useNavigate();
+  
+  const handleClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (!disabled && href !== '#') {
+      navigate(href);
+    }
+  };
+
   return (
     <a 
       href={href}
+      onClick={handleClick}
       className={cn(
         'font-medium transition-colors duration-200 relative',
-        active 
-          ? 'text-infinity-blue-600' 
-          : 'text-neural-gray-600 hover:text-infinity-blue-600',
+        disabled 
+          ? 'text-neutral-gray-400 cursor-not-allowed'
+          : active 
+            ? 'text-infinity-blue-600' 
+            : 'text-neural-gray-600 hover:text-infinity-blue-600 cursor-pointer',
         className
       )}
     >
       {children}
-      {active && (
+      {active && !disabled && (
         <span className="absolute bottom-0 left-0 w-full h-0.5 bg-infinity-blue-600 rounded-full transform -translate-y-2" />
       )}
     </a>

@@ -5,6 +5,7 @@ import { Header } from './components/Header';
 import { Hero } from './components/Hero';
 import { DocumentUploader } from './components/DocumentUploader';
 import { SearchInterface } from './components/SearchInterface';
+import { KnowledgeGraphViz } from './components/KnowledgeGraphViz';
 import { BrandShowcase, TypographyScale } from './components/BrandElements';
 import './App.css';
 
@@ -118,6 +119,28 @@ function AppContent() {
                 <Header />
                 <main className="min-h-screen bg-gray-50">
                   <SearchInterface />
+                </main>
+              </ProtectedRoute>
+            } 
+          />
+
+          <Route 
+            path="/graph" 
+            element={
+              <ProtectedRoute>
+                <Header />
+                <main className="min-h-screen bg-gray-50">
+                  <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                    <div className="mb-8">
+                      <h1 className="text-3xl font-bold text-neural-gray-900 mb-2">
+                        Knowledge Graph
+                      </h1>
+                      <p className="text-lg text-neural-gray-600">
+                        Explore the connections between your documents, concepts, and ideas in an interactive visualization.
+                      </p>
+                    </div>
+                    <KnowledgeGraphViz />
+                  </div>
                 </main>
               </ProtectedRoute>
             } 
