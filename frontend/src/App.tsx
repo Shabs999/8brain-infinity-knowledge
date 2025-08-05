@@ -4,6 +4,7 @@ import { AuthPage } from './components/auth/AuthPage';
 import { Header } from './components/Header';
 import { Hero } from './components/Hero';
 import { DocumentUploader } from './components/DocumentUploader';
+import { SearchInterface } from './components/SearchInterface';
 import { BrandShowcase, TypographyScale } from './components/BrandElements';
 import './App.css';
 
@@ -105,6 +106,18 @@ function AppContent() {
                     </p>
                   </div>
                   <DocumentUploader onFileUpload={handleFileUpload} />
+                </main>
+              </ProtectedRoute>
+            } 
+          />
+
+          <Route 
+            path="/search" 
+            element={
+              <ProtectedRoute>
+                <Header />
+                <main className="min-h-screen bg-gray-50">
+                  <SearchInterface />
                 </main>
               </ProtectedRoute>
             } 

@@ -48,6 +48,7 @@ app.get('/api/health', (_req: Request, res: Response) => {
 import documentsRouter from './routes/documents';
 import databaseRouter from './routes/database';
 import authRouter from './routes/auth';
+import searchRouter from './routes/search';
 
 // Import database manager for initialization
 import { databaseManager } from './services/DatabaseManager';
@@ -56,6 +57,7 @@ import { databaseManager } from './services/DatabaseManager';
 app.use('/api/auth', authRouter);
 app.use('/api/documents', documentsRouter);
 app.use('/api/database', databaseRouter);
+app.use('/api/search', searchRouter);
 
 app.get('/api', (_req: Request, res: Response) => {
   res.json({
@@ -66,6 +68,7 @@ app.get('/api', (_req: Request, res: Response) => {
       auth: '/api/auth/*',
       database: '/api/database/*',
       documents: '/api/documents/*',
+      search: '/api/search/*',
       ai: '/api/ai/*',
       graph: '/api/graph/*'
     }

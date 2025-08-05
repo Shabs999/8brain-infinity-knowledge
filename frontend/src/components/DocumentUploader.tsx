@@ -20,9 +20,17 @@ interface UploadedFile {
     processingTime: number;
     metadata: any;
   };
+  // Vector processing results
   vectorProcessing?: {
-    status: string;
+    status: 'pending' | 'completed' | 'partial' | 'failed';
     message: string;
+  };
+  embeddingResults?: {
+    vectorCount: number;
+    tokensUsed: number;
+    cost: number;
+    processingTime: number;
+    storageError?: string;
   };
   graphProcessing?: {
     status: string;
@@ -177,6 +185,7 @@ export const DocumentUploader: React.FC<DocumentUploaderProps> = ({
                         error: fileResult.error,
                         textExtraction: fileResult.textExtraction,
                         vectorProcessing: fileResult.vectorProcessing,
+                        embeddingResults: fileResult.embeddingResults,
                         graphProcessing: fileResult.graphProcessing
                       }
                     : uf
@@ -483,15 +492,48 @@ const FileItem: React.FC<FileItemProps> = ({
               </div>
             )}
 
-            {/* Next Phase Status */}
+            {/* Vector Processing Results */}
+            {uploadedFile.embeddingResults && (
+              <div className="mt-3 p-3 bg-gradient-to-r from-infinity-purple-50 to-infinity-blue-50 rounded-lg border border-infinity-purple-200">
+                <div className="text-xs font-medium text-infinity-purple-800 mb-2">🤖 Vector Embeddings Generated</div>
+                <div className="grid grid-cols-2 gap-4 text-xs text-neural-gray-600">
+                  <div>
+                    <span className="font-medium">Vectors Created:</span> {uploadedFile.embeddingResults.vectorCount}
+                  </div>
+                  <div>
+                    <span className="font-medium">Processing Time:</span> {uploadedFile.embeddingResults.processingTime}ms
+                  </div>
+                  <div>
+                    <span className="font-medium">Tokens Used:</span> {uploadedFile.embeddingResults.tokensUsed.toLocaleString()}
+                  </div>
+                  <div>
+                    <span className="font-medium">Cost:</span> ${uploadedFile.embeddingResults.cost.toFixed(4)}
+                  </div>
+                </div>
+                {uploadedFile.embeddingResults.storageError && (
+                  <div className="mt-2 text-xs text-amber-700 bg-amber-50 p-2 rounded border border-amber-200">
+                    ⚠️ Storage Warning: {uploadedFile.embeddingResults.storageError}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Processing Status */}
             <div className="mt-3 flex space-x-4">
               <div className="flex items-center space-x-1">
-                <div className="w-2 h-2 bg-yellow-400 rounded-full"></div>
-                <span className="text-xs text-neural-gray-600">Vector Embeddings: {uploadedFile.vectorProcessing?.status}</span>
+                <div className={`w-2 h-2 rounded-full ${
+                  uploadedFile.vectorProcessing?.status === 'completed' ? 'bg-green-400' :
+                  uploadedFile.vectorProcessing?.status === 'partial' ? 'bg-amber-400' :
+                  uploadedFile.vectorProcessing?.status === 'failed' ? 'bg-red-400' :
+                  'bg-gray-400'
+                }`}></div>
+                <span className="text-xs text-neural-gray-600">
+                  Vector Embeddings: {uploadedFile.vectorProcessing?.status || 'pending'}
+                </span>
               </div>
               <div className="flex items-center space-x-1">
-                <div className="w-2 h-2 bg-yellow-400 rounded-full"></div>
-                <span className="text-xs text-neural-gray-600">Knowledge Graph: {uploadedFile.graphProcessing?.status}</span>
+                <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
+                <span className="text-xs text-neural-gray-600">Knowledge Graph: {uploadedFile.graphProcessing?.status || 'pending'}</span>
               </div>
             </div>
           </div>
