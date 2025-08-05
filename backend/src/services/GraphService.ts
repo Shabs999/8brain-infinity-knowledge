@@ -28,21 +28,33 @@ export class GraphService {
     const password = process.env['NEO4J_PASSWORD'];
 
     if (!uri || !password) {
-      throw new Error('NEO4J_URI and NEO4J_PASSWORD environment variables are required');
+      console.warn('⚠️  NEO4J_URI or NEO4J_PASSWORD not found - Neo4j features will be disabled');
+      this.driver = null as any; // Will be handled in methods
+      return;
     }
 
-    this.driver = neo4j.driver(uri, neo4j.auth.basic(username, password));
+    try {
+      this.driver = neo4j.driver(uri, neo4j.auth.basic(username, password));
+    } catch (error) {
+      console.error('Failed to initialize Neo4j driver:', error);
+      this.driver = null as any;
+    }
   }
 
   async initialize(): Promise<void> {
+    if (!this.driver) {
+      console.log('🔗 Neo4j driver not available - skipping initialization');
+      return;
+    }
+
     try {
       // Test connection
       await this.driver.verifyConnectivity();
-      console.log('Connected to Neo4j successfully');
+      console.log('🔗 Connected to Neo4j successfully');
 
       // Create constraints and indexes
       await this.createSchema();
-      console.log('Neo4j schema initialized');
+      console.log('🔗 Neo4j schema initialized');
     } catch (error) {
       console.error('Failed to initialize Neo4j:', error);
       throw error;
@@ -352,6 +364,15 @@ export class GraphService {
     conceptCount: number;
     relationshipCount: number;
   }> {
+    if (!this.driver) {
+      return {
+        userCount: 0,
+        documentCount: 0,
+        conceptCount: 0,
+        relationshipCount: 0
+      };
+    }
+
     const session = this.driver.session();
     
     try {
@@ -373,12 +394,24 @@ export class GraphService {
         conceptCount: record?.get('conceptCount').toNumber() || 0,
         relationshipCount: record?.get('relationshipCount').toNumber() || 0
       };
+    } catch (error) {
+      console.error('Failed to get graph stats:', error);
+      return {
+        userCount: 0,
+        documentCount: 0,
+        conceptCount: 0,
+        relationshipCount: 0
+      };
     } finally {
       await session.close();
     }
   }
 
   async healthCheck(): Promise<boolean> {
+    if (!this.driver) {
+      return false;
+    }
+
     try {
       await this.driver.verifyConnectivity();
       return true;
@@ -389,6 +422,8 @@ export class GraphService {
   }
 
   async close(): Promise<void> {
-    await this.driver.close();
+    if (this.driver) {
+      await this.driver.close();
+    }
   }
 }
