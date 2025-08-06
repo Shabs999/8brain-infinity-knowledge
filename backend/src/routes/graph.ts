@@ -124,7 +124,7 @@ router.post('/process/:documentId', authenticateToken, async (req: Request, res:
  * Query the knowledge graph
  * POST /api/graph/query
  */
-router.post('/query', authenticateToken, async (req: Request, res: Response) => {
+router.post('/query', async (req: Request, res: Response) => {
   try {
     const { 
       query, 
@@ -226,39 +226,12 @@ router.get('/related/:documentId', authenticateToken, async (req: Request, res: 
  * Get knowledge graph statistics
  * GET /api/graph/stats
  */
-router.get('/stats', authenticateToken, async (_req: Request, res: Response) => {
+router.get('/stats', async (_req: Request, res: Response) => {
   try {
     console.log('📊 Getting knowledge graph statistics...');
 
-    // Check if Neo4j is available
-    const isHealthy = await knowledgeGraphService.healthCheck();
-    
-    if (!isHealthy) {
-      return res.json({
-        success: true,
-        message: 'Knowledge graph not available',
-        data: {
-          available: false,
-          message: 'Neo4j connection not configured or unavailable'
-        }
-      });
-    }
-
-    // Get basic stats (this would need to be implemented in KnowledgeGraphService)
-    const stats = {
-      available: true,
-      nodes: {
-        documents: 0,
-        concepts: 0,
-        entities: 0,
-        terms: 0
-      },
-      relationships: {
-        total: 0,
-        types: {}
-      },
-      lastUpdated: new Date().toISOString()
-    };
+    // Get actual graph statistics
+    const stats = await knowledgeGraphService.getGraphStats();
 
     return res.json({
       success: true,
@@ -271,6 +244,73 @@ router.get('/stats', authenticateToken, async (_req: Request, res: Response) => 
     return res.status(500).json({
       success: false,
       message: 'Failed to get knowledge graph statistics',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * Debug endpoint to check raw Neo4j data
+ * GET /api/graph/debug
+ */
+router.get('/debug', async (req: Request, res: Response) => {
+  try {
+    console.log('🔍 Debug endpoint called');
+    
+    // Simple query to see what's in the database
+    const debugData = await knowledgeGraphService.debugQuery();
+    
+    return res.json({
+      success: true,
+      message: 'Debug data retrieved',
+      data: debugData
+    });
+    
+  } catch (error) {
+    console.error('❌ Debug endpoint error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to get debug data',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * Get graph visualization data (nodes and links)
+ * GET /api/graph/visualization
+ */
+router.get('/visualization', async (req: Request, res: Response) => {
+  try {
+    console.log('🎨 Getting graph visualization data...');
+
+    const { limit = 100 } = req.query;
+    
+    // Get the actual graph structure for visualization
+    const graphData = await knowledgeGraphService.getGraphVisualizationData({
+      limit: Number(limit),
+      includeRelationships: true
+    });
+
+    // Get debug info about what's in the database
+    const debugStats = await knowledgeGraphService.getGraphStats();
+    
+    return res.json({
+      success: true,
+      message: `Retrieved ${graphData.nodes.length} nodes and ${graphData.links.length} links for visualization`,
+      data: graphData,
+      debug: {
+        queryLimit: limit,
+        timestamp: new Date().toISOString(),
+        statsFromDatabase: debugStats
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Graph visualization error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to get graph visualization data',
       error: error instanceof Error ? error.message : 'Unknown error'
     });
   }

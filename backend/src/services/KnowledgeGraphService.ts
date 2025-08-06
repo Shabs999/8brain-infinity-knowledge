@@ -611,6 +611,279 @@ export class KnowledgeGraphService {
       return false;
     }
   }
+
+  async getGraphStats(): Promise<{
+    available: boolean;
+    nodes: {
+      documents: number;
+      concepts: number;
+      entities: number;
+      terms: number;
+    };
+    relationships: {
+      total: number;
+      types: { [key: string]: number };
+    };
+    lastUpdated: string;
+  }> {
+    if (!this.driver) {
+      return {
+        available: false,
+        nodes: { documents: 0, concepts: 0, entities: 0, terms: 0 },
+        relationships: { total: 0, types: {} },
+        lastUpdated: new Date().toISOString()
+      };
+    }
+
+    const session = this.driver.session();
+    try {
+      // Debug: Check what labels exist first
+      const labelsResult = await session.run('CALL db.labels()');
+      console.log('Available labels in Neo4j:', labelsResult.records.map(r => r.get(0)));
+      
+      // Check total nodes
+      const totalResult = await session.run('MATCH (n) RETURN count(n) as count');
+      console.log('Total nodes in Neo4j:', totalResult.records[0]?.get('count').toNumber() || 0);
+      
+      // Simple queries to count each type
+      const docResult = await session.run('MATCH (d:Document) RETURN count(d) as count');
+      const conceptResult = await session.run('MATCH (c:Concept) RETURN count(c) as count');
+      const entityResult = await session.run('MATCH (e:Entity) RETURN count(e) as count');
+      const termResult = await session.run('MATCH (t:Term) RETURN count(t) as count');
+      const relResult = await session.run('MATCH ()-[r]->() RETURN count(r) as count');
+
+      return {
+        available: true,
+        nodes: {
+          documents: docResult.records[0]?.get('count').toNumber() || 0,
+          concepts: conceptResult.records[0]?.get('count').toNumber() || 0,
+          entities: entityResult.records[0]?.get('count').toNumber() || 0,
+          terms: termResult.records[0]?.get('count').toNumber() || 0
+        },
+        relationships: {
+          total: relResult.records[0]?.get('count').toNumber() || 0,
+          types: {}
+        },
+        lastUpdated: new Date().toISOString()
+      };
+
+    } catch (error) {
+      console.error('Error getting graph stats:', error);
+      return {
+        available: true, // Neo4j is available, just query failed
+        nodes: { documents: 0, concepts: 0, entities: 0, terms: 0 },
+        relationships: { total: 0, types: {} },
+        lastUpdated: new Date().toISOString()
+      };
+    } finally {
+      await session.close();
+    }
+  }
+
+  async getGraphVisualizationData(options: {
+    limit?: number;
+    includeRelationships?: boolean;
+  } = {}): Promise<{
+    nodes: Array<{
+      id: string;
+      name: string;
+      type: string;
+      properties: any;
+    }>;
+    links: Array<{
+      source: string;
+      target: string;
+      type: string;
+      properties?: any;
+    }>;
+    debug?: any;
+  }> {
+    if (!this.driver) {
+      return { nodes: [], links: [] };
+    }
+
+    const { limit = 100, includeRelationships = true } = options;
+    const session = this.driver.session();
+    
+    try {
+      // Use the exact same pattern as getGraphStats
+      console.log(`🔍 Starting visualization query with limit: ${limit}`);
+      
+      // First test - just get counts like the stats method
+      const docCountResult = await session.run('MATCH (d:Document) RETURN count(d) as count');
+      const docCount = docCountResult.records[0]?.get('count').toNumber() || 0;
+      console.log(`📄 Document count: ${docCount}`);
+      
+      // Now try to get the actual nodes
+      const docResult = await session.run('MATCH (d:Document) RETURN d LIMIT $limit', { limit });
+      console.log(`📄 Found ${docResult.records.length} document records`);
+      
+      const conceptResult = await session.run('MATCH (c:Concept) RETURN c LIMIT $limit', { limit });
+      console.log(`💡 Found ${conceptResult.records.length} concepts`);
+      
+      const entityResult = await session.run('MATCH (e:Entity) RETURN e LIMIT $limit', { limit });
+      console.log(`🏷️  Found ${entityResult.records.length} entities`);
+      
+      const termResult = await session.run('MATCH (t:Term) RETURN t LIMIT $limit', { limit });
+      console.log(`📝 Found ${termResult.records.length} terms`);
+      
+      const nodes = [];
+      
+      // Process documents
+      for (const record of docResult.records) {
+        const node = record.get('d');
+        
+        if (node && node.properties) {
+          // More flexible ID handling - use node identity if no id property
+          const nodeId = node.properties.id || node.identity?.toString() || `doc_${Date.now()}_${Math.random()}`;
+          const nodeName = node.properties.title || node.properties.filename || node.properties.name || `Document ${nodeId}`;
+          
+          console.log('📄 Processing document:', { id: nodeId, name: nodeName });
+          
+          nodes.push({
+            id: nodeId,
+            name: nodeName,
+            type: 'document',
+            properties: node.properties
+          });
+        }
+      }
+      
+      // Process concepts  
+      for (const record of conceptResult.records) {
+        const node = record.get('c');
+        
+        if (node && node.properties) {
+          // More flexible ID handling
+          const nodeId = node.properties.id || node.identity?.toString() || `concept_${Date.now()}_${Math.random()}`;
+          const nodeName = node.properties.name || node.properties.value || `Concept ${nodeId}`;
+          
+          nodes.push({
+            id: nodeId,
+            name: nodeName,
+            type: 'concept',
+            properties: node.properties
+          });
+        }
+      }
+      
+      // Process entities
+      for (const record of entityResult.records) {
+        const node = record.get('e');
+        if (node && node.properties) {
+          const nodeId = node.properties.id || node.identity?.toString() || `entity_${Date.now()}_${Math.random()}`;
+          const nodeName = node.properties.name || `Entity ${nodeId}`;
+          
+          nodes.push({
+            id: nodeId,
+            name: nodeName,
+            type: 'entity',
+            properties: node.properties
+          });
+        }
+      }
+      
+      // Process terms
+      for (const record of termResult.records) {
+        const node = record.get('t');
+        if (node && node.properties) {
+          const nodeId = node.properties.id || node.identity?.toString() || `term_${Date.now()}_${Math.random()}`;
+          const nodeName = node.properties.value || node.properties.name || `Term ${nodeId}`;
+          
+          nodes.push({
+            id: nodeId,
+            name: nodeName,
+            type: 'term',
+            properties: node.properties
+          });
+        }
+      }
+      
+      console.log(`📊 Processed ${nodes.length} total nodes`);
+
+      let links: Array<{
+        source: string;
+        target: string;
+        type: string;
+        properties?: any;
+      }> = [];
+
+      if (includeRelationships && nodes.length > 0) {
+        // Get relationships between the nodes
+        const nodeIds = nodes.map(n => n.id);
+        const relationshipsResult = await session.run(`
+          MATCH (a)-[r]->(b)
+          WHERE a.id IN $nodeIds AND b.id IN $nodeIds
+          RETURN a.id as sourceId, b.id as targetId, type(r) as relType, properties(r) as relProps
+          LIMIT $relationshipLimit
+        `, { 
+          nodeIds,
+          relationshipLimit: limit * 5
+        });
+
+        links = relationshipsResult.records.map(record => ({
+          source: record.get('sourceId'),
+          target: record.get('targetId'), 
+          type: record.get('relType'),
+          properties: record.get('relProps')
+        }));
+      }
+      
+      return { 
+        nodes, 
+        links,
+        debug: {
+          docCount,
+          nodeCount: nodes.length,
+          limitUsed: limit
+        }
+      };
+
+    } catch (error) {
+      console.error('Error getting graph visualization data:', error);
+      return { nodes: [], links: [] };
+    } finally {
+      await session.close();
+    }
+  }
+
+  async debugQuery(): Promise<any> {
+    if (!this.driver) {
+      return { error: 'Neo4j driver not available' };
+    }
+
+    const session = this.driver.session();
+    
+    try {
+      // Get basic database info
+      const totalResult = await session.run('MATCH (n) RETURN count(n) as totalNodes');
+      const labelResult = await session.run('CALL db.labels()');
+      const relTypeResult = await session.run('CALL db.relationshipTypes()');
+      
+      // Get sample nodes
+      const sampleResult = await session.run(`
+        MATCH (n) 
+        RETURN n, labels(n) as nodeLabels, keys(n) as nodeKeys
+        LIMIT 5
+      `);
+      
+      const samples = sampleResult.records.map(record => ({
+        labels: record.get('nodeLabels'),
+        keys: record.get('nodeKeys'),
+        properties: record.get('n').properties
+      }));
+      
+      return {
+        totalNodes: totalResult.records[0]?.get('totalNodes')?.toNumber() || 0,
+        availableLabels: labelResult.records.map(r => r.get(0)),
+        relationshipTypes: relTypeResult.records.map(r => r.get(0)),
+        sampleNodes: samples
+      };
+      
+    } finally {
+      await session.close();
+    }
+  }
 }
 
 // Export singleton instance

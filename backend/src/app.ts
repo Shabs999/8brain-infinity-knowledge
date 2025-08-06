@@ -51,6 +51,7 @@ import authRouter from './routes/auth';
 import searchRouter from './routes/search';
 import aiRouter from './routes/ai';
 import graphRouter from './routes/graph';
+import voiceRouter from './routes/voice';
 
 // Import database manager for initialization
 import { databaseManager } from './services/DatabaseManager';
@@ -63,6 +64,7 @@ app.use('/api/database', databaseRouter);
 app.use('/api/search', searchRouter);
 app.use('/api/ai', aiRouter);
 app.use('/api/graph', graphRouter);
+app.use('/api/voice', voiceRouter);
 
 app.get('/api', (_req: Request, res: Response) => {
   res.json({
