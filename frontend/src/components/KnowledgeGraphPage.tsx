@@ -59,12 +59,8 @@ const KnowledgeGraphPage: React.FC = () => {
     setError(null);
 
     try {
-      // Get graph statistics
-      const statsResponse = await axios.get('/api/graph/stats', {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`
-        }
-      });
+      // Get graph statistics (no auth required now)
+      const statsResponse = await axios.get('/api/graph/stats');
       setGraphStats(statsResponse.data.data);
 
       // If no graph data available, show empty state
@@ -84,7 +80,6 @@ const KnowledgeGraphPage: React.FC = () => {
 
       const graphResponse = await axios.post('/api/graph/query', queryParams, {
         headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
           'Content-Type': 'application/json'
         }
       });
