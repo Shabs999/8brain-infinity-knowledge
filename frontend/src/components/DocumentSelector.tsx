@@ -68,7 +68,7 @@ export const DocumentSelector: React.FC<DocumentSelectorProps> = ({
         const mappedDocs: Document[] = docsWithText.map((doc: any) => ({
           _id: doc.id,
           filename: doc.filename,
-          originalName: doc.filename,
+          originalName: doc.originalName || doc.filename, // Use the real original name from API
           fileSize: doc.fileSize || 0,
           fileType: doc.fileType || 'unknown',
           uploadDate: doc.uploadedAt || new Date().toISOString(),
@@ -95,7 +95,7 @@ export const DocumentSelector: React.FC<DocumentSelectorProps> = ({
   };
 
   const formatDate = (dateString: string): string => {
-    return new Date(dateString).toLocaleDateString();
+    return new Date(dateString).toLocaleString();
   };
 
   const getFileIcon = (fileType: string) => {
