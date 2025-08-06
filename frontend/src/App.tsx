@@ -7,6 +7,7 @@ import { DocumentUploader } from './components/DocumentUploader';
 import { SearchInterface } from './components/SearchInterface';
 import { AIAnalysisPage } from './components/AIAnalysisPage';
 import SimpleGraphPage from './components/SimpleGraphPage';
+import EnhancedKnowledgeGraph from './components/EnhancedKnowledgeGraph';
 import { BrandShowcase, TypographyScale } from './components/BrandElements';
 import './App.css';
 
@@ -143,7 +144,21 @@ function AppContent() {
               <ProtectedRoute>
                 <Header />
                 <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                  <SimpleGraphPage />
+                  <div className="mb-8">
+                    <h1 className="text-3xl font-bold text-neural-gray-900 mb-2">
+                      Knowledge Graph Visualization
+                    </h1>
+                    <p className="text-lg text-neural-gray-600">
+                      Interactive exploration of your documents, concepts, entities, and their relationships.
+                    </p>
+                  </div>
+                  <EnhancedKnowledgeGraph width={1200} height={700} />
+                  
+                  {/* Fallback simple stats */}
+                  <div className="mt-8">
+                    <h2 className="text-xl font-semibold text-neural-gray-800 mb-4">Graph Statistics</h2>
+                    <SimpleGraphPage />
+                  </div>
                 </main>
               </ProtectedRoute>
             } 
@@ -152,6 +167,26 @@ function AppContent() {
           {/* Development/Demo Routes */}
           <Route path="/brand" element={<BrandShowcase />} />
           <Route path="/typography" element={<TypographyScale />} />
+          
+          {/* Temporary unprotected graph demo */}
+          <Route 
+            path="/graph-demo" 
+            element={
+              <>
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                  <div className="mb-8">
+                    <h1 className="text-3xl font-bold text-neural-gray-900 mb-2">
+                      Knowledge Graph Demo (No Auth Required)
+                    </h1>
+                    <p className="text-lg text-neural-gray-600">
+                      Interactive visualization demo with sample data.
+                    </p>
+                  </div>
+                  <EnhancedKnowledgeGraph width={1200} height={700} />
+                </div>
+              </>
+            } 
+          />
           
           {/* Redirect root to appropriate page */}
           <Route 
