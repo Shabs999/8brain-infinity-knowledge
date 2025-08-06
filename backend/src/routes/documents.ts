@@ -7,8 +7,7 @@ import { textExtractionService, TextExtractionService } from '../services/TextEx
 import { embeddingService } from '../services/EmbeddingService';
 import { vectorService } from '../services/VectorService';
 import { semanticSearchService } from '../services/SemanticSearchService';
-import { Document } from '../models/Document';
-import { authenticateToken } from '../middleware/auth';
+import { DocumentMetadataService } from '../services/DocumentMetadataService';
 
 const router = express.Router();
 
@@ -161,15 +160,22 @@ router.post('/upload', upload.array('documents', 10), async (req: Request, res: 
             console.log(`⚠️  OpenAI not available - skipping embedding generation`);
           }
           
-          // Enhanced metadata with complete processing results
-          const metadata = {
+          // Store document metadata for later retrieval
+          const docMetadata = {
             id: documentId,
             originalName: file.originalname,
             filename: file.filename,
             mimetype: file.mimetype,
             size: file.size,
             uploadedAt: new Date().toISOString(),
-            status: 'processed' as const,
+            status: 'processed' as const
+          };
+
+          DocumentMetadataService.store(docMetadata);
+
+          // Enhanced metadata with complete processing results
+          const metadata = {
+            ...docMetadata,
             path: file.path,
             
             // Text extraction results
@@ -197,15 +203,22 @@ router.post('/upload', upload.array('documents', 10), async (req: Request, res: 
         } catch (error) {
           console.error(`❌ Text extraction failed for ${file.originalname}:`, error);
           
-          // Return metadata with error status
-          return {
+          // Store metadata even for failed documents
+          const failedMetadata = {
             id: documentId,
             originalName: file.originalname,
             filename: file.filename,
             mimetype: file.mimetype,
             size: file.size,
             uploadedAt: new Date().toISOString(),
-            status: 'failed' as const,
+            status: 'failed' as const
+          };
+
+          DocumentMetadataService.store(failedMetadata);
+
+          // Return metadata with error status
+          return {
+            ...failedMetadata,
             path: file.path,
             error: error instanceof Error ? error.message : 'Text extraction failed'
           };
@@ -246,17 +259,58 @@ router.post('/upload', upload.array('documents', 10), async (req: Request, res: 
 // Get all user documents
 router.get('/', async (_req: Request, res: Response) => {
   try {
-    // TODO: In next phase, implement:
-    // - User authentication middleware
-    // - Database query for user's documents
-    // - Document status and metadata
+    // Get documents from metadata service
+    const storedMetadata = DocumentMetadataService.getAll();
+    const documents: any[] = [];
+    
+    for (const metadata of storedMetadata) {
+      const filePath = path.join(uploadsDir, metadata.filename);
+      
+      // Only include documents that still exist on disk and were processed successfully
+      if (fs.existsSync(filePath) && metadata.status === 'processed') {
+        const ext = path.extname(metadata.filename).toLowerCase();
+        let fileType = 'unknown';
+        
+        switch (ext) {
+          case '.pdf': fileType = 'pdf'; break;
+          case '.docx': fileType = 'docx'; break;
+          case '.txt': fileType = 'txt'; break;
+          case '.md': fileType = 'md'; break;
+        }
+        
+        documents.push({
+          id: metadata.filename, // Use filename as ID for now
+          filename: metadata.filename,
+          originalName: metadata.originalName, // Now we have the real original name!
+          fileSize: metadata.size,
+          fileType: fileType,
+          uploadedAt: metadata.uploadedAt,
+          hasExtractedText: true,
+          status: 'completed'
+        });
+      }
+    }
 
-    // Mock response for now
+    // Remove duplicates based on originalName (in case same file was uploaded multiple times)
+    const uniqueDocuments = documents.reduce((acc, current) => {
+      const existing = acc.find((item: any) => item.originalName === current.originalName);
+      if (!existing) {
+        acc.push(current);
+      } else {
+        // Keep the more recent upload
+        if (new Date(current.uploadedAt) > new Date(existing.uploadedAt)) {
+          const index = acc.findIndex((item: any) => item.originalName === existing.originalName);
+          acc[index] = current;
+        }
+      }
+      return acc;
+    }, []);
+
     res.json({
       success: true,
       data: {
-        documents: [],
-        total: 0,
+        documents: uniqueDocuments,
+        total: uniqueDocuments.length,
         page: 1,
         limit: 20
       }

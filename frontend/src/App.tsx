@@ -6,6 +6,7 @@ import { Hero } from './components/Hero';
 import { DocumentUploader } from './components/DocumentUploader';
 import { SearchInterface } from './components/SearchInterface';
 import { AIAnalysisPage } from './components/AIAnalysisPage';
+import KnowledgeGraphPage from './components/KnowledgeGraphPage';
 import { BrandShowcase, TypographyScale } from './components/BrandElements';
 import './App.css';
 
@@ -131,6 +132,18 @@ function AppContent() {
                 <Header />
                 <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
                   <AIAnalysisPage />
+                </main>
+              </ProtectedRoute>
+            } 
+          />
+
+          <Route 
+            path="/graph" 
+            element={
+              <ProtectedRoute>
+                <Header />
+                <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                  <KnowledgeGraphPage />
                 </main>
               </ProtectedRoute>
             } 

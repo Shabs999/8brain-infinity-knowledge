@@ -1,5 +1,6 @@
 import { VectorService } from './VectorService';
 import { GraphService } from './GraphService';
+import { knowledgeGraphService } from './KnowledgeGraphService';
 
 export class DatabaseManager {
   private vectorService: VectorService;
@@ -26,6 +27,10 @@ export class DatabaseManager {
       // Initialize graph database (Neo4j)
       console.log('🔗 Connecting to Neo4j graph database...');
       await this.graphService.initialize();
+
+      // Initialize knowledge graph service (Neo4j Graph RAG)
+      console.log('🧠 Initializing knowledge graph service...');
+      await knowledgeGraphService.initialize();
 
       this.initialized = true;
       console.log('🚀 Database services initialized (connections will be established when credentials are provided)');
@@ -107,7 +112,10 @@ export class DatabaseManager {
 
   async close(): Promise<void> {
     try {
-      await this.graphService.close();
+      await Promise.all([
+        this.graphService.close(),
+        knowledgeGraphService.close()
+      ]);
       console.log('Database connections closed');
     } catch (error) {
       console.error('Error closing database connections:', error);
