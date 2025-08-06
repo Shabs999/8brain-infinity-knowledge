@@ -8,6 +8,8 @@ import { embeddingService } from '../services/EmbeddingService';
 import { vectorService } from '../services/VectorService';
 import { semanticSearchService } from '../services/SemanticSearchService';
 import { DocumentMetadataService } from '../services/DocumentMetadataService';
+import { entityExtractionService } from '../services/EntityExtractionService';
+import { knowledgeGraphService } from '../services/KnowledgeGraphService';
 
 const router = express.Router();
 
@@ -159,6 +161,76 @@ router.post('/upload', upload.array('documents', 10), async (req: Request, res: 
           } else {
             console.log(`⚠️  OpenAI not available - skipping embedding generation`);
           }
+
+          // Step 5: Graph RAG Processing
+          let graphProcessing: {
+            status: 'pending' | 'completed' | 'partial' | 'failed';
+            message: string;
+          } = {
+            status: 'pending',
+            message: 'Ready for knowledge graph construction'
+          };
+
+          let graphResults = null;
+
+          if (embeddingService.isAvailable()) { // Use embeddingService availability as proxy for AI services
+            try {
+              console.log(`🕸️  Starting knowledge graph processing for ${file.originalname}...`);
+              
+              // Extract entities and relationships from the document text
+              const extractionResults = await entityExtractionService.extractFromDocument(
+                extractedDocument.extractedText,
+                extractedDocument.metadata?.title || file.originalname
+              );
+
+              console.log(`✅ Entity extraction completed for ${file.originalname}`);
+              console.log(`   🏷️  Extracted ${extractionResults.entities.length} entities`);
+              console.log(`   💡 Extracted ${extractionResults.concepts.length} concepts`);
+              console.log(`   🔗 Extracted ${extractionResults.relationships.length} relationships`);
+              console.log(`   📚 Extracted ${extractionResults.terms.length} terms`);
+              console.log(`   💰 Cost: $${extractionResults.cost.toFixed(4)}`);
+
+              // Store in knowledge graph
+              const graphDocument = {
+                id: documentId,
+                filename: file.originalname,
+                title: extractedDocument.metadata?.title || file.originalname,
+                uploadedAt: new Date(),
+                fileType: path.extname(file.originalname).toLowerCase(),
+                fileSize: file.size,
+                userId: 'anonymous', // TODO: Use real user ID from authentication
+                summary: extractionResults.summary
+              };
+
+              await knowledgeGraphService.storeExtractionResults(graphDocument, extractionResults);
+              
+              graphProcessing = {
+                status: 'completed',
+                message: `Knowledge graph created with ${extractionResults.entities.length} entities, ${extractionResults.concepts.length} concepts, and ${extractionResults.relationships.length} relationships`
+              };
+
+              graphResults = {
+                entityCount: extractionResults.entities.length,
+                conceptCount: extractionResults.concepts.length,
+                relationshipCount: extractionResults.relationships.length,
+                termCount: extractionResults.terms.length,
+                processingTime: extractionResults.processingTime,
+                cost: extractionResults.cost
+              };
+
+              console.log(`✅ Knowledge graph storage completed for ${file.originalname}`);
+
+            } catch (graphError) {
+              console.error(`❌ Graph processing failed for ${file.originalname}:`, graphError);
+              graphProcessing = {
+                status: 'failed',
+                message: `Graph processing failed: ${graphError instanceof Error ? graphError.message : 'Unknown error'}`
+              };
+            }
+          } else {
+            console.log(`⚠️  Graph services not available - skipping knowledge graph processing`);
+            console.log(`   - AI services not available (check OpenAI configuration)`);
+          }
           
           // Store document metadata for later retrieval
           const docMetadata = {
@@ -191,11 +263,9 @@ router.post('/upload', upload.array('documents', 10), async (req: Request, res: 
             vectorProcessing,
             embeddingResults,
             
-            // Next phase: Knowledge graph processing
-            graphProcessing: {
-              status: 'pending' as const, 
-              message: 'Ready for knowledge graph construction'
-            }
+            // Knowledge graph processing results
+            graphProcessing,
+            graphResults
           };
 
           return metadata;
@@ -252,6 +322,134 @@ router.post('/upload', upload.array('documents', 10), async (req: Request, res: 
     return res.status(500).json({
       success: false,
       message: error instanceof Error ? error.message : 'Upload failed'
+    });
+  }
+});
+
+// Process existing documents through Graph RAG
+router.post('/:id/process-graph', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    
+    // Find document metadata
+    const storedMetadata = DocumentMetadataService.getAll();
+    const docMetadata = storedMetadata.find(meta => meta.filename === id || meta.id === id);
+    
+    if (!docMetadata) {
+      return res.status(404).json({
+        success: false,
+        message: 'Document not found'
+      });
+    }
+
+    const filePath = path.join(uploadsDir, docMetadata.filename);
+    
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({
+        success: false,
+        message: 'Document file not found on disk'
+      });
+    }
+
+    console.log(`🕸️  Starting Graph RAG processing for existing document: ${docMetadata.originalName}`);
+
+    // Re-extract text if needed (we'll use cached results if available)
+    const extractedDocument = await textExtractionService.extractText(
+      filePath,
+      docMetadata.mimetype
+    );
+
+    let graphProcessing: {
+      status: 'pending' | 'completed' | 'partial' | 'failed';
+      message: string;
+    } = {
+      status: 'pending',
+      message: 'Ready for knowledge graph construction'
+    };
+
+    let graphResults = null;
+
+    if (embeddingService.isAvailable()) { // Use embeddingService availability as proxy for AI services
+      try {
+        console.log(`🔍 Extracting entities and relationships...`);
+        
+        // Extract entities and relationships from the document text
+        const extractionResults = await entityExtractionService.extractFromDocument(
+          extractedDocument.extractedText,
+          extractedDocument.metadata?.title || docMetadata.originalName
+        );
+
+        console.log(`✅ Entity extraction completed`);
+        console.log(`   🏷️  Extracted ${extractionResults.entities.length} entities`);
+        console.log(`   💡 Extracted ${extractionResults.concepts.length} concepts`);
+        console.log(`   🔗 Extracted ${extractionResults.relationships.length} relationships`);
+        console.log(`   📚 Extracted ${extractionResults.terms.length} terms`);
+        console.log(`   💰 Cost: $${extractionResults.cost.toFixed(4)}`);
+
+        // Store in knowledge graph
+        const graphDocument = {
+          id: docMetadata.id,
+          filename: docMetadata.originalName,
+          title: extractedDocument.metadata?.title || docMetadata.originalName,
+          uploadedAt: new Date(docMetadata.uploadedAt),
+          fileType: path.extname(docMetadata.filename).toLowerCase(),
+          fileSize: docMetadata.size,
+          userId: 'anonymous', // TODO: Use real user ID from authentication
+          summary: extractionResults.summary
+        };
+
+        await knowledgeGraphService.storeExtractionResults(graphDocument, extractionResults);
+        
+        graphProcessing = {
+          status: 'completed',
+          message: `Knowledge graph created with ${extractionResults.entities.length} entities, ${extractionResults.concepts.length} concepts, and ${extractionResults.relationships.length} relationships`
+        };
+
+        graphResults = {
+          entityCount: extractionResults.entities.length,
+          conceptCount: extractionResults.concepts.length,
+          relationshipCount: extractionResults.relationships.length,
+          termCount: extractionResults.terms.length,
+          processingTime: extractionResults.processingTime,
+          cost: extractionResults.cost
+        };
+
+        console.log(`✅ Knowledge graph storage completed for ${docMetadata.originalName}`);
+
+      } catch (graphError) {
+        console.error(`❌ Graph processing failed:`, graphError);
+        graphProcessing = {
+          status: 'failed',
+          message: `Graph processing failed: ${graphError instanceof Error ? graphError.message : 'Unknown error'}`
+        };
+      }
+    } else {
+      graphProcessing = {
+        status: 'failed',
+        message: 'Graph services not available (OpenAI or Neo4j not configured)'
+      };
+    }
+
+    res.json({
+      success: true,
+      message: 'Graph RAG processing completed',
+      data: {
+        documentId: docMetadata.id,
+        originalName: docMetadata.originalName,
+        graphProcessing,
+        graphResults,
+        textExtraction: {
+          textLength: extractedDocument.textLength,
+          chunkCount: extractedDocument.chunks.length
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('Graph processing error:', error);
+    res.status(500).json({
+      success: false,
+      message: error instanceof Error ? error.message : 'Graph processing failed'
     });
   }
 });
