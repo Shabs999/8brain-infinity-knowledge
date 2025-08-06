@@ -8,6 +8,8 @@ import { SearchInterface } from './components/SearchInterface';
 import { AIAnalysisPage } from './components/AIAnalysisPage';
 import SimpleGraphPage from './components/SimpleGraphPage';
 import EnhancedKnowledgeGraph from './components/EnhancedKnowledgeGraph';
+import VoicePage from './components/VoicePage';
+import VoiceGraphPage from './components/VoiceGraphPage';
 import { BrandShowcase, TypographyScale } from './components/BrandElements';
 import './App.css';
 
@@ -164,6 +166,18 @@ function AppContent() {
             } 
           />
 
+          <Route 
+            path="/voice" 
+            element={
+              <ProtectedRoute>
+                <Header />
+                <main>
+                  <VoicePage />
+                </main>
+              </ProtectedRoute>
+            } 
+          />
+
           {/* Development/Demo Routes */}
           <Route path="/brand" element={<BrandShowcase />} />
           <Route path="/typography" element={<TypographyScale />} />
@@ -186,6 +200,18 @@ function AppContent() {
                 </div>
               </>
             } 
+          />
+          
+          {/* Voice demo route */}
+          <Route 
+            path="/voice-demo" 
+            element={<VoicePage />}
+          />
+          
+          {/* Voice + Graph combined demo */}
+          <Route 
+            path="/voice-graph-demo" 
+            element={<VoiceGraphPage />}
           />
           
           {/* Redirect root to appropriate page */}

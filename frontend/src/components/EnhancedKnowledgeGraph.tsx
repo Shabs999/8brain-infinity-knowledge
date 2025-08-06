@@ -32,12 +32,14 @@ interface EnhancedKnowledgeGraphProps {
   width?: number;
   height?: number;
   className?: string;
+  highlightedNodes?: string[];
 }
 
 const EnhancedKnowledgeGraph: React.FC<EnhancedKnowledgeGraphProps> = ({
   width = 1200,
   height = 800,
-  className = ""
+  className = "",
+  highlightedNodes = []
 }) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const [graphData, setGraphData] = useState<GraphData>({ nodes: [], links: [] });
@@ -249,6 +251,9 @@ const EnhancedKnowledgeGraph: React.FC<EnhancedKnowledgeGraphProps> = ({
       .attr('stroke-width', 2)
       .style('cursor', 'pointer')
       .style('filter', 'drop-shadow(2px 2px 4px rgba(0,0,0,0.1))')
+      .style('opacity', d => highlightedNodes.length === 0 || highlightedNodes.includes(d.id) ? 1 : 0.3)
+      .style('stroke-width', d => highlightedNodes.includes(d.id) ? 4 : 2)
+      .style('stroke', d => highlightedNodes.includes(d.id) ? '#ff6b6b' : '#ffffff')
       .call(d3.drag<any, GraphNode>()
         .on('start', (event, d) => {
           if (!event.active) simulation.alphaTarget(0.3).restart();
@@ -267,7 +272,7 @@ const EnhancedKnowledgeGraph: React.FC<EnhancedKnowledgeGraphProps> = ({
       .on('click', (_, d) => {
         setSelectedNode(d);
       })
-      .on('mouseover', (event, d) => {
+      .on('mouseover', (_, d) => {
         // Highlight connected nodes and links
         node.style('opacity', n => n === d ? 1 : 0.3);
         link.style('opacity', l => {
@@ -323,7 +328,7 @@ const EnhancedKnowledgeGraph: React.FC<EnhancedKnowledgeGraphProps> = ({
         .attr('y', (d: any) => d.y || 0);
     });
 
-  }, [graphData, searchTerm, filterType, width, height]);
+  }, [graphData, searchTerm, filterType, width, height, highlightedNodes]);
 
   // Load data on mount
   useEffect(() => {

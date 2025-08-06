@@ -49,6 +49,7 @@ export const Header: React.FC<HeaderProps> = ({ className }) => {
               <NavLink href="/search">Search</NavLink>
               <NavLink href="/ai">AI Analysis</NavLink>
               <NavLink href="/graph">Graph</NavLink>
+              <NavLink href="/voice">Voice</NavLink>
               <NavLink href="#">Analytics</NavLink>
             </nav>
           )}
