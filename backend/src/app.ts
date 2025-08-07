@@ -1,16 +1,19 @@
 import express from 'express';
+import { createServer } from 'http';
 import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
 import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 import { Request, Response } from 'express';
+import { collaborationService } from './services/CollaborationService';
 
 // Load environment variables
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 8000;
+const httpServer = createServer(app);
 
 // Security middleware
 app.use(helmet());
@@ -44,7 +47,11 @@ app.get('/api/health', (req: Request, res: Response) => {
   });
 });
 
-// API Routes (will be added in subsequent phases)
+// API Routes
+import collaborationRoutes from './routes/collaboration';
+app.use('/api/collaboration', collaborationRoutes);
+
+// API info endpoint
 app.get('/api', (req: Request, res: Response) => {
   res.json({
     message: '8Brain GraphRAG API',
@@ -78,10 +85,14 @@ app.use((err: Error, req: Request, res: Response, next: any) => {
   });
 });
 
+// Initialize WebSocket server for collaboration
+collaborationService.initialize(httpServer);
+
 // Start server
-app.listen(PORT, () => {
+httpServer.listen(PORT, () => {
   console.log(`🧠 8Brain API server running on port ${PORT}`);
   console.log(`🔗 Health check: http://localhost:${PORT}/api/health`);
+  console.log(`🤝 WebSocket server ready for collaborative sessions`);
   console.log(`🌟 Environment: ${process.env.NODE_ENV || 'development'}`);
 });
 

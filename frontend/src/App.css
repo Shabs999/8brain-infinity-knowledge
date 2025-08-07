@@ -35,6 +35,16 @@
 
     --radius: 0.5rem;
   }
+  
+  /* Ensure HSL colors work properly */
+  * {
+    border-color: hsl(var(--border));
+  }
+  
+  body {
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+  }
 
   .dark {
     --background: 222.2 84% 4.9%;
