@@ -1,7 +1,7 @@
 import express, { Request, Response } from 'express';
-import { authenticateToken } from '../middleware/auth';
 import { graphRAGService } from '../services/GraphRAGService';
 import { knowledgeGraphService } from '../services/KnowledgeGraphService';
+import { conversationalAIService } from '../services/ConversationalAIService';
 
 const router = express.Router();
 
@@ -9,6 +9,8 @@ interface VoiceQuery {
   transcript: string;
   intent?: string;
   context?: any;
+  sessionId?: string;
+  enableAI?: boolean;
 }
 
 /**
@@ -17,7 +19,7 @@ interface VoiceQuery {
  */
 router.post('/query', async (req: Request, res: Response) => {
   try {
-    const { transcript, intent, context } = req.body as VoiceQuery;
+    const { transcript, intent, sessionId, enableAI = true } = req.body as VoiceQuery;
 
     // Process voice queries with real Neo4j data
 
@@ -70,6 +72,54 @@ router.post('/query', async (req: Request, res: Response) => {
 
     const processingTime = Date.now() - startTime;
 
+    // 🤖 NEW: Add conversational AI processing
+    let aiResponse = null;
+    if (enableAI) {
+      try {
+        console.log('🤖 Processing with conversational AI...');
+        console.log('🤖 AI Service available check...');
+        
+        const aiAvailable = await conversationalAIService.isAvailable();
+        console.log('🤖 AI availability:', aiAvailable);
+        
+        if (!aiAvailable.conversationalAI) {
+          console.warn('⚠️ AI service not available, skipping AI processing');
+        } else {
+          const aiStartTime = Date.now();
+          
+          const currentSessionId = sessionId || `voice_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          
+          console.log('🤖 Calling processVoiceQuery with session:', currentSessionId);
+          
+          aiResponse = await conversationalAIService.processVoiceQuery(
+            transcript,
+            results,
+            currentSessionId,
+            'voice-user' // TODO: Use actual user ID when available
+          );
+          
+          console.log(`🤖 AI processing completed in ${Date.now() - aiStartTime}ms`);
+          console.log('🤖 AI response generated:', !!aiResponse);
+        }
+        
+      } catch (aiError) {
+        console.error('❌ AI processing failed with error:', aiError);
+        console.error('❌ Error stack:', aiError.stack);
+        
+        // Provide a basic fallback AI response so frontend always gets something
+        console.log('🔄 Providing fallback AI response');
+        aiResponse = {
+          response: generateFallbackResponse(results, transcript),
+          model: 'fallback',
+          confidence: 0.3,
+          followUpSuggestions: ['Try asking again', 'Rephrase your question', 'Ask about specific topics'],
+          usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0, cost: 0 },
+          processingTime: 0,
+          error: 'AI service temporarily unavailable'
+        };
+      }
+    }
+
     return res.json({
       success: true,
       message: 'Voice query processed successfully',
@@ -77,6 +127,7 @@ router.post('/query', async (req: Request, res: Response) => {
         transcript,
         parsedQuery,
         results,
+        aiResponse, // 🤖 NEW: Include AI response
         processingTime,
         timestamp: new Date().toISOString()
       }
@@ -96,7 +147,7 @@ router.post('/query', async (req: Request, res: Response) => {
  * Get voice command suggestions
  * GET /api/voice/suggestions
  */
-router.get('/suggestions', async (req: Request, res: Response) => {
+router.get('/suggestions', async (_req: Request, res: Response) => {
   try {
     const suggestions = [
       {
@@ -156,23 +207,29 @@ router.get('/suggestions', async (req: Request, res: Response) => {
 function parseNaturalLanguageQuery(transcript: string, providedIntent?: string) {
   const query = transcript.toLowerCase().trim();
   
-  // Intent patterns
+  // Intent patterns - ORDER MATTERS! More specific patterns first
   const intentPatterns = {
-    search: /^(show|find|search|get|list|display)/i,
-    count: /^(how many|count|number of|total)/i,
-    relationship: /(connect|relate|relationship|between|link)/i,
-    explain: /^(what is|explain|tell me about|describe)/i,
-    filter: /(only|just|filter|type)/i
+    count: /^(how many|count|number of|total)/i,           // PRIORITY: Count questions first
+    explain: /^(what is|explain|tell me about|describe)/i, // Explain only at start
+    search: /^(show|find|search|get|list|display)/i,      // Search commands
+    relationship: /(connect|relate|relationship|between|link)/i, // Relationship anywhere
+    filter: /(only|just|filter|type)/i                    // Filter modifiers
   };
 
-  // Detect intent if not provided
+  // Detect intent if not provided - check count patterns first
   let intent = providedIntent;
   if (!intent) {
-    for (const [key, pattern] of Object.entries(intentPatterns)) {
-      if (pattern.test(query)) {
-        intent = key;
-        break;
-      }
+    // Check count pattern first (highest priority)
+    if (intentPatterns.count.test(query)) {
+      intent = 'count';
+    } else if (intentPatterns.explain.test(query)) {
+      intent = 'explain';
+    } else if (intentPatterns.search.test(query)) {
+      intent = 'search';
+    } else if (intentPatterns.relationship.test(query)) {
+      intent = 'relationship';
+    } else if (intentPatterns.filter.test(query)) {
+      intent = 'filter';
     }
   }
 
@@ -185,6 +242,7 @@ function parseNaturalLanguageQuery(transcript: string, providedIntent?: string) 
   const keyTerms = query
     .replace(/^(show me|find|search for|what is|how many|count)\s*/i, '')
     .replace(/\b(all|the|about|related to|between|and)\b/g, '')
+    .replace(/[?!.,;:]/g, '') // Remove punctuation
     .split(/\s+/)
     .filter(term => term.length > 2);
 
@@ -292,7 +350,8 @@ async function executeCountQuery(parsedQuery: any) {
     const { entityType } = parsedQuery;
 
     if (entityType) {
-      const count = stats.nodes[entityType + 's'] || 0;
+      const entityKey = (entityType + 's') as keyof typeof stats.nodes;
+      const count = stats.nodes[entityKey] || 0;
       return {
         type: 'count',
         entityType,
@@ -321,7 +380,8 @@ async function executeCountQuery(parsedQuery: any) {
     const { entityType } = parsedQuery;
     
     if (entityType) {
-      const count = demoStats[entityType + 's' as keyof typeof demoStats] || 0;
+      const entityKey = (entityType + 's') as keyof typeof demoStats;
+      const count = demoStats[entityKey] || 0;
       return {
         type: 'count',
         entityType,
@@ -356,8 +416,8 @@ async function executeRelationshipQuery(parsedQuery: any) {
     searchTerms.join(' AND '),
     {
       includeRelationships: true,
-      maxDepth: 2,
-      userId: undefined // Voice queries work without user-specific filtering
+      maxDepth: 2
+      // Voice queries work without user-specific filtering
     }
   );
 
@@ -365,7 +425,7 @@ async function executeRelationshipQuery(parsedQuery: any) {
     type: 'relationship',
     searchTerms,
     relationships: results.relationships,
-    connectedNodes: results.entities.concat(results.concepts),
+    connectedNodes: [...results.entities, ...results.concepts],
     paths: results.paths,
     message: `Found ${results.relationships.length} relationships connecting these items.`
   };
@@ -399,6 +459,14 @@ async function executeExplainQuery(parsedQuery: any) {
           { name: 'Test Driven Development', description: 'Write tests before code' },
           { name: 'Acceptance Test Driven Development', description: 'Define acceptance criteria first' }
         ]
+      },
+      'structured conversation': {
+        name: 'Structured Conversation',
+        description: 'Structured Conversation is a method used in BDD to facilitate understanding and agreement on requirements. It involves collecting examples and establishing a common language that is understood by everyone.',
+        relatedConcepts: [
+          { name: 'BDD', description: 'Behavior Driven Development methodology' },
+          { name: 'Example Mapping', description: 'Technique for breaking down user stories' }
+        ]
       }
     };
 
@@ -422,8 +490,8 @@ async function executeExplainQuery(parsedQuery: any) {
     const searchResults = await graphRAGService.enhancedSearch(searchQuery, {
       useVector: explainServiceStatus.vector,
       useGraph: true,
-      maxResults: 1,
-      userId: undefined // Voice queries work without user-specific filtering
+      maxResults: 1
+      // Voice queries work without user-specific filtering
     });
 
     if (searchResults.results.length === 0) {
@@ -437,20 +505,28 @@ async function executeExplainQuery(parsedQuery: any) {
 
     const item = searchResults.results[0];
     
+    if (!item) {
+      return {
+        type: 'explain',
+        error: `No results found for "${searchQuery}".`,
+        message: `No information found for "${searchQuery}".`
+      };
+    }
+    
     // Get related information
     const relatedInfo = await knowledgeGraphService.queryKnowledgeGraph(
-      item.content || item.name || searchQuery,
+      item.content || searchQuery,
       {
         includeRelationships: true,
-        maxDepth: 1,
-        userId: undefined // Voice queries work without user-specific filtering
+        maxDepth: 1
+        // Voice queries work without user-specific filtering
       }
     );
 
     return {
       type: 'explain',
       item,
-      description: item.metadata?.description || item.content || 'No description available.',
+      description: item.content || 'No description available.',
       relatedConcepts: relatedInfo.concepts,
       relatedEntities: relatedInfo.entities,
       relationships: relatedInfo.relationships,
@@ -490,7 +566,7 @@ async function executeExplainQuery(parsedQuery: any) {
  * Simple endpoint to get real Neo4j data for voice queries  
  * GET /api/voice/data
  */
-router.get('/data', async (req: Request, res: Response) => {
+router.get('/data', async (_req: Request, res: Response) => {
   try {
     const neo4j = require('neo4j-driver');
     const uri = process.env['NEO4J_URI'] || 'bolt://localhost:7687';
@@ -558,10 +634,99 @@ router.get('/data', async (req: Request, res: Response) => {
 });
 
 /**
+ * Get conversation history for a session
+ * GET /api/voice/conversation/:sessionId
+ */
+router.get('/conversation/:sessionId', async (req: Request, res: Response) => {
+  try {
+    const { sessionId } = req.params;
+    if (!sessionId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Session ID is required'
+      });
+    }
+    const history = conversationalAIService.getConversationHistory(sessionId);
+    
+    return res.json({
+      success: true,
+      data: {
+        sessionId,
+        messages: history,
+        messageCount: history.length
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to get conversation history',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * Clear conversation for a session
+ * DELETE /api/voice/conversation/:sessionId
+ */
+router.delete('/conversation/:sessionId', async (req: Request, res: Response) => {
+  try {
+    const { sessionId } = req.params;
+    if (!sessionId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Session ID is required'
+      });
+    }
+    conversationalAIService.clearConversation(sessionId);
+    
+    return res.json({
+      success: true,
+      message: `Conversation ${sessionId} cleared`
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to clear conversation',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * Get AI service status
+ * GET /api/voice/ai-status
+ */
+router.get('/ai-status', async (_req: Request, res: Response) => {
+  try {
+    const status = await conversationalAIService.isAvailable();
+    
+    return res.json({
+      success: true,
+      data: {
+        ...status,
+        features: {
+          conversationalMemory: true,
+          hybridModels: true,
+          contextualResponses: true,
+          smartFollowUps: true
+        }
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to check AI status',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
  * Test endpoint to debug voice queries
  * GET /api/voice/test
  */
-router.get('/test', async (req: Request, res: Response) => {
+router.get('/test', async (_req: Request, res: Response) => {
   try {
     const neo4j = require('neo4j-driver');
     const uri = process.env['NEO4J_URI'];
@@ -607,5 +772,27 @@ router.get('/test', async (req: Request, res: Response) => {
     });
   }
 });
+
+// Fallback AI response generator when AI service fails
+function generateFallbackResponse(results: any, query: string): string {
+  if (!results) {
+    return `I couldn't process your query "${query}". The AI service is temporarily unavailable, but you can still browse your results below.`;
+  }
+
+  if (results.type === 'count') {
+    const total = results.totalNodes || 0;
+    return `Your knowledge graph contains ${total} items. The AI assistant is temporarily unavailable, but the basic count information is shown below.`;
+  }
+
+  if (results.type === 'search' && results.results?.length > 0) {
+    return `I found ${results.results.length} results for your query. The AI assistant is temporarily unavailable, but you can explore the results below.`;
+  }
+
+  if (results.message) {
+    return `${results.message} (AI assistant temporarily unavailable)`;
+  }
+
+  return 'Results are shown below. The AI assistant is temporarily unavailable.';
+}
 
 export default router;

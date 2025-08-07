@@ -23,6 +23,7 @@ const VoiceQueryInterface: React.FC<VoiceQueryInterfaceProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [browserSupported, setBrowserSupported] = useState(true);
+  const [isWarmingUp, setIsWarmingUp] = useState(false);
   
   const recognitionRef = useRef<any>(null);
   const [voiceActivity, setVoiceActivity] = useState(0);
@@ -60,6 +61,14 @@ const VoiceQueryInterface: React.FC<VoiceQueryInterfaceProps> = ({
     recognition.onstart = () => {
       console.log('🎤 Voice recognition started');
       setError(null);
+      setIsWarmingUp(true);
+      // Give microphone time to warm up before accepting speech
+      setTimeout(() => {
+        if (isListening) {
+          setIsWarmingUp(false);
+          console.log('🎤 Microphone ready for speech');
+        }
+      }, 800); // Increased warmup time
     };
 
     recognition.onresult = (event: any) => {
@@ -120,6 +129,7 @@ const VoiceQueryInterface: React.FC<VoiceQueryInterfaceProps> = ({
     recognition.onend = () => {
       console.log('🎤 Voice recognition ended');
       setIsListening(false);
+      setIsWarmingUp(false);
       setVoiceActivity(0);
     };
 
@@ -203,7 +213,8 @@ const VoiceQueryInterface: React.FC<VoiceQueryInterfaceProps> = ({
       // Call the backend voice API
       const response = await axios.post('/api/voice/query', {
         transcript: query,
-        intent: detectIntent(query)
+        intent: detectIntent(query),
+        enableAI: true  // Enable AI by default
       });
 
       console.log('📊 Voice query response:', response.data);
@@ -220,21 +231,22 @@ const VoiceQueryInterface: React.FC<VoiceQueryInterfaceProps> = ({
     }
   };
 
-  // Basic intent detection
+  // Basic intent detection - MUST match backend logic!
   const detectIntent = (query: string): string => {
     const lowerQuery = query.toLowerCase();
     
-    if (lowerQuery.includes('show') || lowerQuery.includes('find') || lowerQuery.includes('search')) {
-      return 'search';
-    } else if (lowerQuery.includes('what') || lowerQuery.includes('explain')) {
-      return 'explain';
-    } else if (lowerQuery.includes('how many') || lowerQuery.includes('count')) {
+    // Match backend patterns exactly - order matters!
+    if (/^(how many|count|number of|total)/i.test(lowerQuery)) {
       return 'count';
-    } else if (lowerQuery.includes('relate') || lowerQuery.includes('connect')) {
+    } else if (/^(what is|explain|tell me about|describe)/i.test(lowerQuery)) {
+      return 'explain';
+    } else if (/^(show|find|search|get|list|display)/i.test(lowerQuery)) {
+      return 'search';
+    } else if (/(connect|relate|relationship|between|link)/i.test(lowerQuery)) {
       return 'relationship';
     }
     
-    return 'general';
+    return 'search'; // Default to search, let backend decide
   };
 
   // Keyboard shortcut (spacebar to talk) - only when not typing
@@ -310,10 +322,17 @@ const VoiceQueryInterface: React.FC<VoiceQueryInterfaceProps> = ({
 
           {/* Status */}
           <div className="text-center space-y-2">
-            {isListening && (
+            {isWarmingUp && (
+              <Badge variant="outline" className="animate-pulse">
+                <Mic className="h-3 w-3 mr-1" />
+                Warming up microphone...
+              </Badge>
+            )}
+            
+            {isListening && !isWarmingUp && (
               <Badge variant="default" className="animate-pulse">
                 <Volume2 className="h-3 w-3 mr-1" />
-                Listening...
+                Listening - Speak now!
               </Badge>
             )}
             
@@ -324,7 +343,7 @@ const VoiceQueryInterface: React.FC<VoiceQueryInterfaceProps> = ({
               </Badge>
             )}
             
-            {!isListening && !isProcessing && (
+            {!isListening && !isProcessing && !isWarmingUp && (
               <p className="text-sm text-gray-600">
                 Click the microphone to start (spacebar works when not typing)
               </p>

@@ -13,6 +13,7 @@ const VoicePage: React.FC = () => {
   }>>([]);
   const [, setCurrentTranscript] = useState('');
   const [currentResults, setCurrentResults] = useState<any>(null);
+  const [currentAIResponse, setCurrentAIResponse] = useState<any>(null);
 
   const handleQueryResult = (_query: string, results: any) => {
     console.log('📊 Voice query results:', results);
@@ -27,6 +28,7 @@ const VoicePage: React.FC = () => {
       
       setQueryHistory(prev => [newHistoryItem, ...prev]);
       setCurrentResults(results.data.results);
+      setCurrentAIResponse(results.data.aiResponse || null);
     }
   };
 
@@ -59,12 +61,127 @@ const VoicePage: React.FC = () => {
           />
         </div>
 
+        {/* AI Response */}
+        {currentAIResponse && (
+          <Card className="p-6 mb-6 bg-gradient-to-r from-infinity-blue-50 to-infinity-purple-50 border-infinity-blue-200">
+            <div className="flex items-start gap-4">
+              <div className="flex-shrink-0">
+                <div className="w-10 h-10 bg-infinity-blue-600 rounded-full flex items-center justify-center">
+                  <Sparkles className="h-5 w-5 text-white" />
+                </div>
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-3">
+                  <h3 className="text-lg font-semibold text-infinity-blue-900">AI Assistant</h3>
+                  <Badge variant="secondary" className="text-xs">
+                    {currentAIResponse.model}
+                  </Badge>
+                  {currentAIResponse.confidence && (
+                    <Badge variant="outline" className="text-xs">
+                      {Math.round(currentAIResponse.confidence * 100)}% confidence
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-gray-800 text-base leading-relaxed mb-4">
+                  {currentAIResponse.response}
+                </p>
+                
+                {/* Follow-up Suggestions */}
+                {currentAIResponse.followUpSuggestions && currentAIResponse.followUpSuggestions.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium text-gray-700">Try asking:</p>
+                    <div className="flex flex-wrap gap-2">
+                      {currentAIResponse.followUpSuggestions.map((suggestion: string, index: number) => (
+                        <button
+                          key={index}
+                          className="text-sm px-3 py-1 bg-white border border-infinity-blue-200 rounded-full hover:bg-infinity-blue-50 hover:border-infinity-blue-300 transition-colors cursor-pointer"
+                          onClick={() => {
+                            // TODO: Implement suggestion click handler
+                            console.log('Suggestion clicked:', suggestion);
+                          }}
+                        >
+                          {suggestion}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                {/* Processing Stats */}
+                {currentAIResponse.processingTime && (
+                  <div className="mt-3 text-xs text-gray-500">
+                    AI processing: {currentAIResponse.processingTime}ms
+                    {currentAIResponse.usage?.totalTokens && (
+                      <span className="ml-2">• {currentAIResponse.usage.totalTokens} tokens</span>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </Card>
+        )}
+
         {/* Current Results */}
         {currentResults && (
           <Card className="p-6 mb-12">
             <h2 className="text-2xl font-semibold mb-4">Results</h2>
             <div className="space-y-4">
-              {currentResults.totalResults > 0 ? (
+              {/* Handle Explain Results */}
+              {currentResults.type === 'explain' && currentResults.item ? (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Badge variant="default">Explanation</Badge>
+                    <span className="text-sm text-gray-600">
+                      {currentResults.message}
+                    </span>
+                  </div>
+                  
+                  {/* Main Concept Card */}
+                  <Card className="p-6 border-l-4 border-knowledge-gold-500 bg-gradient-to-r from-knowledge-gold-50 to-orange-50">
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-bold text-xl text-knowledge-gold-800">{currentResults.item.name}</h3>
+                        <Badge variant="outline" className="text-xs bg-knowledge-gold-100">
+                          concept
+                        </Badge>
+                      </div>
+                      
+                      <p className="text-gray-800 text-base leading-relaxed">
+                        {currentResults.description}
+                      </p>
+                      
+                      {/* Related Concepts */}
+                      {currentResults.relatedConcepts && currentResults.relatedConcepts.length > 0 && (
+                        <div className="mt-4">
+                          <h4 className="font-semibold text-sm text-gray-700 mb-2">Related Concepts:</h4>
+                          <div className="flex flex-wrap gap-2">
+                            {currentResults.relatedConcepts.map((concept: any, index: number) => (
+                              <Badge key={index} variant="secondary" className="text-xs">
+                                {concept.name}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Related Entities */}
+                      {currentResults.relatedEntities && currentResults.relatedEntities.length > 0 && (
+                        <div className="mt-4">
+                          <h4 className="font-semibold text-sm text-gray-700 mb-2">Related Tools & Frameworks:</h4>
+                          <div className="flex flex-wrap gap-2">
+                            {currentResults.relatedEntities.map((entity: any, index: number) => (
+                              <Badge key={index} variant="outline" className="text-xs">
+                                {entity.name}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </Card>
+                </div>
+              ) : currentResults.totalResults > 0 ? (
+                /* Handle Search/Count Results */
                 <>
                   <div className="flex items-center gap-2 mb-4">
                     <Badge variant="default">
