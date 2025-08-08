@@ -4,11 +4,15 @@ import { useCollaboration } from '../hooks/useCollaboration';
 import { VoiceQueryInterface } from './VoiceQueryInterface';
 import { GraphVisualization } from './GraphVisualization';
 import { SearchBar } from './SearchBar';
+import { VoiceAnnotation } from './VoiceAnnotation';
+import { AnnotationsList } from './AnnotationsList';
+import { TestAnnotations } from './TestAnnotations';
+import { KnowledgeTrails } from './KnowledgeTrails';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Badge } from './ui/badge';
-import { Mic, Users, Share2, Copy, Check, LogOut, Loader2 } from 'lucide-react';
+import { Mic, Users, Share2, Copy, Check, LogOut, Loader2, Volume2, Map } from 'lucide-react';
 import { Alert, AlertDescription } from './ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { ScrollArea } from './ui/scroll-area';
@@ -64,6 +68,8 @@ export const CollaborativeVoicePage: React.FC = () => {
   const [activeTab, setActiveTab] = useState('voice');
   const [copied, setCopied] = useState(false);
   const [showJoinDialog, setShowJoinDialog] = useState(true);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [showAnnotationDialog, setShowAnnotationDialog] = useState(false);
   
   // Collaboration hook
   const {
@@ -72,10 +78,18 @@ export const CollaborativeVoicePage: React.FC = () => {
     participants,
     userColor,
     queryHistory,
+    annotations,
+    trails,
     shareVoiceQuery,
+    addVoiceAnnotation,
     leaveSession,
+    startTrail,
+    endTrail,
+    visitNode,
     participantCount,
-    isSessionFull
+    isSessionFull,
+    getNodeAnnotations,
+    getActiveTrail
   } = useCollaboration({
     sessionId: sessionId || '',
     userId,
@@ -167,6 +181,24 @@ export const CollaborativeVoicePage: React.FC = () => {
     navigate('/voice');
   }, [leaveSession, navigate]);
 
+  // Handle annotation added
+  const handleAnnotationAdded = useCallback((nodeId: string, audioData: string, duration?: number) => {
+    console.log('Adding annotation:', { nodeId, duration, audioDataLength: audioData.length });
+    addVoiceAnnotation(nodeId, audioData, duration);
+    setShowAnnotationDialog(false);
+  }, [addVoiceAnnotation]);
+
+  // Get all annotations across all nodes
+  const getAllAnnotations = useCallback(() => {
+    const allAnnotations: any[] = [];
+    annotations.forEach((nodeAnnotations, nodeId) => {
+      allAnnotations.push(...nodeAnnotations);
+    });
+    return allAnnotations.sort((a, b) => 
+      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
+  }, [annotations]);
+
   // Render participant avatar
   const renderParticipant = (participant: Participant) => (
     <div key={participant.userId} className="flex items-center gap-2">
@@ -228,7 +260,7 @@ export const CollaborativeVoicePage: React.FC = () => {
           {isSessionFull ? (
             <Alert className="mb-4">
               <AlertDescription>
-                This session is full. Maximum {session?.maxParticipants || 10} participants allowed.
+                This session is full. Maximum 10 participants allowed.
               </AlertDescription>
             </Alert>
           ) : (
@@ -342,10 +374,18 @@ export const CollaborativeVoicePage: React.FC = () => {
           {/* Main Content Area */}
           <div className="lg:col-span-3">
             <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <TabsList className="grid w-full grid-cols-3">
+              <TabsList className="grid w-full grid-cols-5">
                 <TabsTrigger value="voice">Voice Query</TabsTrigger>
                 <TabsTrigger value="search">Search</TabsTrigger>
                 <TabsTrigger value="graph">Knowledge Graph</TabsTrigger>
+                <TabsTrigger value="annotations">
+                  <Volume2 className="h-4 w-4 mr-1" />
+                  Annotations
+                </TabsTrigger>
+                <TabsTrigger value="trails">
+                  <Map className="h-4 w-4 mr-1" />
+                  Trails
+                </TabsTrigger>
               </TabsList>
 
               <TabsContent value="voice" className="mt-6">
@@ -468,6 +508,53 @@ export const CollaborativeVoicePage: React.FC = () => {
                     }}
                   />
                 </Card>
+              </TabsContent>
+
+              <TabsContent value="annotations" className="mt-6">
+                <div className="space-y-6">
+                  {/* Test Annotations - Temporary for debugging */}
+                  <TestAnnotations
+                    annotations={annotations}
+                    onAddAnnotation={addVoiceAnnotation}
+                    userId={userId}
+                    userName={userName}
+                    userColor={userColor}
+                  />
+                  
+                  {/* Original components commented out for now
+                  <VoiceAnnotation
+                    nodeId={selectedNodeId || 'general'}
+                    nodeName={selectedNodeId ? `Node: ${selectedNodeId}` : 'General Session Note'}
+                    onAnnotationAdded={handleAnnotationAdded}
+                    userColor={userColor}
+                    userName={userName}
+                  />
+                  
+                  <AnnotationsList
+                    annotations={getAllAnnotations()}
+                    currentUserId={userId}
+                  />
+                  */}
+                </div>
+              </TabsContent>
+
+              <TabsContent value="trails" className="mt-6">
+                <KnowledgeTrails
+                  trails={trails}
+                  currentUserId={userId}
+                  onNavigateToNode={(nodeId) => {
+                    // Record node visit if trail is active
+                    const activeTrail = getActiveTrail();
+                    if (activeTrail) {
+                      visitNode(nodeId, `Node ${nodeId}`);
+                    }
+                    // Switch to graph tab and focus node
+                    setActiveTab('graph');
+                    // TODO: Implement node focus in graph
+                  }}
+                  onStartNewTrail={startTrail}
+                  onEndTrail={endTrail}
+                />
               </TabsContent>
             </Tabs>
           </div>

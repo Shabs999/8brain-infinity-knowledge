@@ -17,11 +17,48 @@ interface VoiceQueryShared {
   results?: any;
 }
 
+interface VoiceAnnotation {
+  id: string;
+  nodeId: string;
+  userId: string;
+  userName: string;
+  userColor: string;
+  audioData: string;
+  timestamp: Date;
+  duration?: number;
+  transcript?: string;
+}
+
+interface TrailNode {
+  nodeId: string;
+  nodeName: string;
+  timestamp: Date;
+  userId: string;
+  userName: string;
+  userColor: string;
+}
+
+interface KnowledgeTrail {
+  id: string;
+  userId: string;
+  userName: string;
+  userColor: string;
+  nodes: TrailNode[];
+  startTime: Date;
+  endTime?: Date;
+  isActive: boolean;
+}
+
 interface CollaborationSession {
   id: string;
   name: string;
   participants: UserSession[];
   queryHistory: VoiceQueryShared[];
+  annotations?: Array<{
+    nodeId: string;
+    annotations: VoiceAnnotation[];
+  }>;
+  trails?: KnowledgeTrail[];
 }
 
 interface UseCollaborationOptions {
@@ -44,6 +81,8 @@ export const useCollaboration = (options: UseCollaborationOptions) => {
   const [participants, setParticipants] = useState<UserSession[]>([]);
   const [userColor, setUserColor] = useState<string>('#1e40af');
   const [queryHistory, setQueryHistory] = useState<VoiceQueryShared[]>([]);
+  const [annotations, setAnnotations] = useState<Map<string, VoiceAnnotation[]>>(new Map());
+  const [trails, setTrails] = useState<KnowledgeTrail[]>([]);
   
   const socketRef = useRef<Socket | null>(null);
 
@@ -82,6 +121,20 @@ export const useCollaboration = (options: UseCollaborationOptions) => {
       setParticipants(data.session.participants);
       setUserColor(data.userColor);
       setQueryHistory(data.session.queryHistory || []);
+      
+      // Load existing annotations
+      if (data.session.annotations) {
+        const annotationsMap = new Map<string, VoiceAnnotation[]>();
+        data.session.annotations.forEach(({ nodeId, annotations }) => {
+          annotationsMap.set(nodeId, annotations);
+        });
+        setAnnotations(annotationsMap);
+      }
+      
+      // Load existing trails
+      if (data.session.trails) {
+        setTrails(data.session.trails);
+      }
     });
 
     newSocket.on('session_full', (data: { message: string }) => {
@@ -109,14 +162,65 @@ export const useCollaboration = (options: UseCollaborationOptions) => {
     });
 
     // Annotation events
-    newSocket.on('annotation_added', (data: any) => {
+    newSocket.on('annotation_added', (data: VoiceAnnotation) => {
       console.log('📝 Annotation added:', data);
+      
+      // Update local annotations only if it's not from the current user
+      // (since we already added it optimistically)
+      setAnnotations(prev => {
+        const updated = new Map(prev);
+        const nodeAnnotations = updated.get(data.nodeId) || [];
+        
+        // Check if this annotation already exists (by checking userId and timestamp proximity)
+        const isDuplicate = nodeAnnotations.some(ann => 
+          ann.userId === data.userId && 
+          Math.abs(new Date(ann.timestamp).getTime() - new Date(data.timestamp).getTime()) < 1000
+        );
+        
+        if (!isDuplicate) {
+          updated.set(data.nodeId, [...nodeAnnotations, data]);
+        }
+        
+        return updated;
+      });
+      
       onAnnotationAdded?.(data);
     });
 
     // Focus events
     newSocket.on('user_focus_changed', (data: any) => {
       onFocusChanged?.(data);
+    });
+
+    // Trail events
+    newSocket.on('trail_started', (data: KnowledgeTrail) => {
+      console.log('🚀 Trail started:', data);
+      setTrails(prev => [...prev, data]);
+    });
+
+    newSocket.on('trail_updated', (data: KnowledgeTrail) => {
+      console.log('🗺️ Trail updated:', data);
+      setTrails(prev => prev.map(trail => 
+        trail.id === data.id ? data : trail
+      ));
+    });
+
+    newSocket.on('trail_ended', (data: { trailId: string; endTime: Date }) => {
+      console.log('🏁 Trail ended:', data.trailId);
+      setTrails(prev => prev.map(trail => 
+        trail.id === data.trailId 
+          ? { ...trail, isActive: false, endTime: new Date(data.endTime) }
+          : trail
+      ));
+    });
+
+    newSocket.on('node_visited', (data: { trailId: string; node: TrailNode }) => {
+      console.log('📍 Node visited:', data);
+      setTrails(prev => prev.map(trail => 
+        trail.id === data.trailId 
+          ? { ...trail, nodes: [...trail.nodes, data.node] }
+          : trail
+      ));
     });
 
     // Cleanup
@@ -144,15 +248,45 @@ export const useCollaboration = (options: UseCollaborationOptions) => {
   }, [socket, connected, sessionId, userId, userName]);
 
   // Add voice annotation
-  const addVoiceAnnotation = useCallback((nodeId: string, audioData: string) => {
-    if (!socket || !connected) return;
+  const addVoiceAnnotation = useCallback((nodeId: string, audioData: string, duration?: number, transcript?: string) => {
+    if (!socket || !connected) {
+      console.error('Cannot add annotation - socket not connected');
+      return;
+    }
     
+    console.log('Emitting add_annotation event:', { nodeId, userId, userName });
+    
+    // Optimistically add the annotation locally
+    const localAnnotation: VoiceAnnotation = {
+      id: `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      nodeId,
+      userId,
+      userName,
+      userColor,
+      audioData,
+      timestamp: new Date(),
+      duration,
+      transcript
+    };
+    
+    // Update local state immediately
+    setAnnotations(prev => {
+      const updated = new Map(prev);
+      const nodeAnnotations = updated.get(nodeId) || [];
+      updated.set(nodeId, [...nodeAnnotations, localAnnotation]);
+      return updated;
+    });
+    
+    // Then emit to server
     socket.emit('add_annotation', {
       nodeId,
       audioData,
-      userId
+      userId,
+      userName,
+      duration,
+      transcript
     });
-  }, [socket, connected, userId]);
+  }, [socket, connected, userId, userName, userColor]);
 
   // Update focus
   const updateNodeFocus = useCallback((nodeId: string) => {
@@ -172,6 +306,38 @@ export const useCollaboration = (options: UseCollaborationOptions) => {
     socket.emit('leave_session', { sessionId, userId });
   }, [socket, connected, sessionId, userId]);
 
+  // Trail management methods
+  const startTrail = useCallback(() => {
+    if (!socket || !connected) return;
+    
+    socket.emit('start_trail', { sessionId, userId, userName });
+  }, [socket, connected, sessionId, userId, userName]);
+
+  const endTrail = useCallback(() => {
+    if (!socket || !connected) return;
+    
+    // Find active trail for current user
+    const activeTrail = trails.find(t => t.userId === userId && t.isActive);
+    if (!activeTrail) return;
+    
+    socket.emit('end_trail', { sessionId, trailId: activeTrail.id });
+  }, [socket, connected, sessionId, userId, trails]);
+
+  const visitNode = useCallback((nodeId: string, nodeName: string) => {
+    if (!socket || !connected) return;
+    
+    // Find active trail for current user
+    const activeTrail = trails.find(t => t.userId === userId && t.isActive);
+    if (!activeTrail) return;
+    
+    socket.emit('visit_node', {
+      sessionId,
+      trailId: activeTrail.id,
+      nodeId,
+      nodeName
+    });
+  }, [socket, connected, sessionId, userId, trails]);
+
   return {
     // Connection state
     connected,
@@ -182,15 +348,24 @@ export const useCollaboration = (options: UseCollaborationOptions) => {
     participants,
     userColor,
     queryHistory,
+    annotations,
+    trails,
     
     // Actions
     shareVoiceQuery,
     addVoiceAnnotation,
     updateNodeFocus,
     leaveSession,
+    startTrail,
+    endTrail,
+    visitNode,
     
     // Participant info
     participantCount: participants.length,
-    isSessionFull: session ? participants.length >= (session as any).maxParticipants : false
+    isSessionFull: session ? participants.length >= (session as any).maxParticipants : false,
+    
+    // Helper functions
+    getNodeAnnotations: (nodeId: string) => annotations.get(nodeId) || [],
+    getActiveTrail: () => trails.find(t => t.userId === userId && t.isActive)
   };
 };

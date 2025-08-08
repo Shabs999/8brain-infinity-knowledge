@@ -21,12 +21,49 @@ interface VoiceQueryEvent {
   results?: any;
 }
 
+// Voice annotation event
+interface VoiceAnnotation {
+  id: string;
+  nodeId: string;
+  userId: string;
+  userName: string;
+  userColor: string;
+  audioData: string;
+  timestamp: Date;
+  duration?: number;
+  transcript?: string;
+}
+
+// Trail node
+interface TrailNode {
+  nodeId: string;
+  nodeName: string;
+  timestamp: Date;
+  userId: string;
+  userName: string;
+  userColor: string;
+}
+
+// Knowledge trail
+interface KnowledgeTrail {
+  id: string;
+  userId: string;
+  userName: string;
+  userColor: string;
+  nodes: TrailNode[];
+  startTime: Date;
+  endTime?: Date;
+  isActive: boolean;
+}
+
 // Collaborative session
 interface CollaborativeSession {
   id: string;
   name: string;
   participants: Map<string, UserSession>;
   queryHistory: VoiceQueryEvent[];
+  annotations: Map<string, VoiceAnnotation[]>; // nodeId -> annotations
+  trails: Map<string, KnowledgeTrail>; // trailId -> trail
   createdAt: Date;
   maxParticipants: number;
 }
@@ -79,13 +116,38 @@ export class CollaborationService {
       });
 
       // Voice annotation
-      socket.on('add_annotation', (data: { nodeId: string; audioData: string; userId: string }) => {
+      socket.on('add_annotation', (data: { 
+        nodeId: string; 
+        audioData: string; 
+        userId: string;
+        userName?: string;
+        duration?: number;
+        transcript?: string;
+      }) => {
         this.handleVoiceAnnotation(socket, data);
       });
 
       // Cursor/focus tracking
       socket.on('focus_node', (data: { nodeId: string; userId: string; sessionId: string }) => {
         this.handleNodeFocus(socket, data);
+      });
+
+      // Trail events
+      socket.on('start_trail', (data: { sessionId: string; userId: string; userName: string }) => {
+        this.handleStartTrail(socket, data);
+      });
+
+      socket.on('end_trail', (data: { sessionId: string; trailId: string }) => {
+        this.handleEndTrail(socket, data);
+      });
+
+      socket.on('visit_node', (data: { 
+        sessionId: string; 
+        trailId: string; 
+        nodeId: string; 
+        nodeName: string 
+      }) => {
+        this.handleVisitNode(socket, data);
       });
 
       // Disconnect handling
@@ -132,7 +194,14 @@ export class CollaborationService {
         id: session.id,
         name: session.name,
         participants: Array.from(session.participants.values()),
-        queryHistory: session.queryHistory.slice(-20) // Last 20 queries
+        queryHistory: session.queryHistory.slice(-20), // Last 20 queries
+        annotations: Array.from(session.annotations.entries()).map(([nodeId, annotations]) => ({
+          nodeId,
+          annotations: annotations.slice(-10) // Last 10 annotations per node
+        })),
+        trails: Array.from(session.trails.values()).filter(trail => 
+          trail.isActive || trail.nodes.length > 0 // Only send active or non-empty trails
+        )
       },
       userColor: userSession.color
     });
@@ -187,8 +256,8 @@ export class CollaborationService {
     // Add to history
     session.queryHistory.push(data);
 
-    // Broadcast to all participants
-    this.io?.to(data.sessionId).emit('voice_query_shared', {
+    // Broadcast to all participants INCLUDING the sender
+    this.io?.in(data.sessionId).emit('voice_query_shared', {
       query: data.query,
       userId: data.userId,
       userName: data.userName,
@@ -206,16 +275,40 @@ export class CollaborationService {
     // Find user's session
     const sessionId = this.findUserSession(socket.id);
     if (!sessionId) return;
+    
+    const session = this.sessions.get(sessionId);
+    if (!session) return;
+    
+    // Get user info
+    const user = Array.from(session.participants.values())
+      .find(u => u.socketId === socket.id);
+    if (!user) return;
 
-    // Broadcast annotation to session
-    socket.to(sessionId).emit('annotation_added', {
+    // Create annotation
+    const annotation: VoiceAnnotation = {
+      id: `annotation_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       nodeId: data.nodeId,
-      userId: data.userId,
+      userId: user.userId,
+      userName: user.name,
+      userColor: user.color,
       audioData: data.audioData,
-      timestamp: new Date()
-    });
+      timestamp: new Date(),
+      duration: data.duration,
+      transcript: data.transcript
+    };
 
-    console.log(`📝 Voice annotation added to node ${data.nodeId}`);
+    // Store annotation
+    if (!session.annotations.has(data.nodeId)) {
+      session.annotations.set(data.nodeId, []);
+    }
+    session.annotations.get(data.nodeId)!.push(annotation);
+
+    // Broadcast annotation to all participants INCLUDING the sender
+    this.io?.in(sessionId).emit('annotation_added', annotation);
+
+    console.log(`📝 Voice annotation added to node ${data.nodeId} by ${user.name}`);
+    console.log(`   Broadcasting to ${session.participants.size} participants in session ${sessionId}`);
+    console.log(`   Annotation ID: ${annotation.id}`);
   }
 
   /**
@@ -257,6 +350,8 @@ export class CollaborationService {
       name: `Knowledge Session ${sessionId.substring(0, 6)}`,
       participants: new Map(),
       queryHistory: [],
+      annotations: new Map(),
+      trails: new Map(),
       createdAt: new Date(),
       maxParticipants: 10
     };
@@ -298,6 +393,102 @@ export class CollaborationService {
    */
   getSessionDetails(sessionId: string): CollaborativeSession | null {
     return this.sessions.get(sessionId) || null;
+  }
+
+  /**
+   * Handle start trail event
+   */
+  private handleStartTrail(socket: Socket, data: { sessionId: string; userId: string; userName: string }): void {
+    const { sessionId, userId, userName } = data;
+    const session = this.sessions.get(sessionId);
+    if (!session) return;
+
+    const user = session.participants.get(userId);
+    if (!user) return;
+
+    // Create new trail
+    const trail: KnowledgeTrail = {
+      id: `trail_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      userId,
+      userName: user.name,
+      userColor: user.color,
+      nodes: [],
+      startTime: new Date(),
+      isActive: true
+    };
+
+    // Add trail to session
+    session.trails.set(trail.id, trail);
+
+    // Broadcast to all participants
+    this.io?.in(sessionId).emit('trail_started', trail);
+
+    console.log(`🚀 Trail started by ${userName} in session ${sessionId}`);
+  }
+
+  /**
+   * Handle end trail event
+   */
+  private handleEndTrail(socket: Socket, data: { sessionId: string; trailId: string }): void {
+    const { sessionId, trailId } = data;
+    const session = this.sessions.get(sessionId);
+    if (!session) return;
+
+    const trail = session.trails.get(trailId);
+    if (!trail) return;
+
+    // Update trail
+    trail.isActive = false;
+    trail.endTime = new Date();
+
+    // Broadcast to all participants
+    this.io?.in(sessionId).emit('trail_ended', {
+      trailId,
+      endTime: trail.endTime
+    });
+
+    console.log(`🏁 Trail ${trailId} ended in session ${sessionId}`);
+  }
+
+  /**
+   * Handle visit node event
+   */
+  private handleVisitNode(socket: Socket, data: { 
+    sessionId: string; 
+    trailId: string; 
+    nodeId: string; 
+    nodeName: string 
+  }): void {
+    const { sessionId, trailId, nodeId, nodeName } = data;
+    const session = this.sessions.get(sessionId);
+    if (!session) return;
+
+    const trail = session.trails.get(trailId);
+    if (!trail || !trail.isActive) return;
+
+    const user = session.participants.get(trail.userId);
+    if (!user) return;
+
+    // Create trail node
+    const trailNode: TrailNode = {
+      nodeId,
+      nodeName,
+      timestamp: new Date(),
+      userId: trail.userId,
+      userName: trail.userName,
+      userColor: trail.userColor
+    };
+
+    // Add to trail
+    trail.nodes.push(trailNode);
+
+    // Broadcast to all participants
+    this.io?.in(sessionId).emit('node_visited', {
+      trailId,
+      node: trailNode
+    });
+
+    console.log(`📍 Node ${nodeName} visited on trail ${trailId}`);
   }
 }
 
